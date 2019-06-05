@@ -22,6 +22,7 @@ package unreachable
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -177,16 +178,21 @@ func (r *ReconcileRemoteMachineSet) Reconcile(request reconcile.Request) (reconc
 		if cond.Status == corev1.ConditionTrue {
 			cdLog.Infof("cluster is reachable now, %s condition will be set to %s", hivev1.UnreachableCondition, corev1.ConditionFalse)
 		}
+	} else {
+		cdLog.Infof("condition does not already exist")
 	}
 
-	// If cluster already has "unreachable" condition set is true, set the "unreachable" condition to false
-	// as the cluster is reachable now
+	oldConditions := cd.Status.Conditions
+	// If cluster already has "unreachable" condition true, set to false as the cluster is reachable now
 	cd.Status.Conditions = controllerutils.SetClusterDeploymentCondition(cd.Status.Conditions, hivev1.UnreachableCondition,
 		corev1.ConditionFalse, "ClusterReachable", "cluster is reachable", controllerutils.UpdateConditionAlways)
-	err = r.Status().Update(context.TODO(), cd)
-	if err != nil {
-		cdLog.WithError(err).Error("error updating cluster deployment with unreachable condition (= false)")
-		return reconcile.Result{}, err
+	if !reflect.DeepEqual(oldConditions, cd.Status.Conditions) {
+		cdLog.Info("conditions have changed, updating cluster deployment")
+		err = r.Status().Update(context.TODO(), cd)
+		if err != nil {
+			cdLog.WithError(err).Error("error updating cluster deployment with unreachable condition (= false)")
+			return reconcile.Result{}, err
+		}
 	}
 	return reconcile.Result{}, nil
 }
