@@ -31,6 +31,9 @@ type HiveConfigSpec struct {
 	// a cluster deployment(if specified), with precedence given to the contents of the pull secret for the cluster deployment.
 	// +optional
 	GlobalPullSecret *corev1.LocalObjectReference `json:"globalPullSecret,omitempty"`
+
+	// FailedProvisionConfig is used to configure settings related to handling provision failures.
+	FailedProvisionConfig *FailedProvisionConfig `json:"failedProvisionConfig,omitempty"`
 }
 
 // HiveConfigStatus defines the observed state of Hive
@@ -39,6 +42,14 @@ type HiveConfigStatus struct {
 	// configmap data from the openshift-config-managed namespace. When the configmap changes,
 	// admission is redeployed.
 	AggregatorClientCAHash string `json:"aggregatorClientCAHash,omitempty"`
+}
+
+// FailedProvisionConfig contains settings to control behavior undertaken by Hive when an installation attempt fails.
+type FailedProvisionConfig struct {
+
+	// GatherLogs enables functionality that will attempt to gather full logs from the cluster if an installation
+	// fails for any reason. The logs will be stored in a persistent volume for up to 7 days.
+	GatherLogs bool `json:"gatherLogs,omitempty"`
 }
 
 // ExternalDNSConfig contains settings for running external-dns in a Hive
