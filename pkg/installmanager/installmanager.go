@@ -693,11 +693,6 @@ func (m *InstallManager) gatherLogs(cd *hivev1.ClusterDeployment) {
 	} else {
 		m.log.Info("successfully ran oc adm must-gather")
 	}
-
-	// TODO: Remove this
-	m.log.Warn("TAKING A NAP, DON'T COMMIT THIS")
-	time.Sleep(6 * time.Hour)
-
 }
 
 func (m *InstallManager) gatherClusterLogs(cd *hivev1.ClusterDeployment) error {
