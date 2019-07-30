@@ -509,6 +509,7 @@ func (m *InstallManager) provisionCluster(cd *hivev1.ClusterDeployment) error {
 }
 
 func (m *InstallManager) runOpenShiftInstallCommand(args []string) error {
+	m.log.WithField("args", args).Info("running openshift-install binary")
 	cmd := exec.Command(filepath.Join(m.WorkDir, "openshift-install"), args...)
 
 	// save the commands' stdout/stderr to a file
@@ -696,11 +697,15 @@ func (m *InstallManager) gatherLogs(cd *hivev1.ClusterDeployment) {
 	// TODO: Remove this
 	m.log.Warn("TAKING A NAP, DON'T COMMIT THIS")
 	time.Sleep(6 * time.Hour)
+
 }
 
 func (m *InstallManager) gatherClusterLogs(cd *hivev1.ClusterDeployment) error {
 	m.log.Info("attempting to gather logs with oc adm must-gather")
-	cmd := exec.Command(filepath.Join(m.WorkDir, "oc"), "adm", "must-gather", "--dest-dir", "/logs")
+	destDir := filepath.Join(m.LogsDir, fmt.Sprintf("%s-must-gather", time.Now().Format("20060102150405")))
+	cmd := exec.Command(filepath.Join(m.WorkDir, "oc"), "adm", "must-gather", "--dest-dir", destDir)
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, fmt.Sprintf("KUBECONFIG=%s", filepath.Join(m.WorkDir, "auth", "kubeconfig")))
 	stdout, err := cmd.Output()
 	m.log.Infof("must-gather output: %s", stdout)
 	return err
