@@ -107,6 +107,7 @@ type Options struct {
 	InstallOnce        bool
 	UninstallOnce      bool
 	SimulateFailure    bool
+	WorkerNodes        int64
 }
 
 const (
@@ -163,6 +164,7 @@ func NewCreateClusterCommand() *cobra.Command {
 	flags.BoolVar(&opt.InstallOnce, "install-once", false, "Run the install only one time and fail if not successful")
 	flags.BoolVar(&opt.UninstallOnce, "uninstall-once", false, "Run the uninstall only one time and fail if not successful")
 	flags.BoolVar(&opt.SimulateFailure, "simulate-failure", false, "Simulate an install failure late in the process by injecting an invalid manifest.")
+	flags.Int64Var(&opt.WorkerNodes, "workers", 3, "Number of worker nodes to create.")
 	return cmd
 }
 
@@ -503,7 +505,7 @@ func (o *Options) GenerateClusterDeployment() (*hivev1.ClusterDeployment, *hivev
 			Compute: []hivev1.MachinePool{
 				{
 					Name:     "worker",
-					Replicas: int64ptr(3),
+					Replicas: int64ptr(o.WorkerNodes),
 					Platform: hivev1.MachinePoolPlatform{
 						AWS: &hivev1.AWSMachinePoolPlatform{
 							InstanceType: "m4.large",
