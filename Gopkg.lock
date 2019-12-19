@@ -807,6 +807,14 @@
   revision = "19de17fd6e66c4a7dcf02069c3faa7e7403fbc70"
 
 [[projects]]
+  branch = "ovn-dev"
+  digest = "1:5095e31018d7100efe2d0bc823239486723c685845582c2b6adf9cf7fe7ce638"
+  name = "github.com/openshift/cluster-network-operator"
+  packages = ["pkg/apis/networkoperator/v1"]
+  pruneopts = "NUT"
+  revision = "c226dcab667ea57774c81b73102f08bff5c2d518"
+
+[[projects]]
   digest = "1:a3e7136ef0712327eb7364b9c1e5acbb867e07f17f82ad0f17e51c65aec27c21"
   name = "github.com/openshift/generic-admission-server"
   packages = [
@@ -2068,6 +2076,7 @@
     "github.com/openshift/cluster-api/pkg/apis/machine/v1beta1",
     "github.com/openshift/cluster-autoscaler-operator/pkg/apis/autoscaling/v1",
     "github.com/openshift/cluster-autoscaler-operator/pkg/apis/autoscaling/v1beta1",
+    "github.com/openshift/cluster-network-operator/pkg/apis/networkoperator/v1",
     "github.com/openshift/generic-admission-server/pkg/cmd",
     "github.com/openshift/installer/pkg/asset/installconfig/azure",
     "github.com/openshift/installer/pkg/asset/machines/aws",
