@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	hivev1alpha1 "github.com/openshift/hive/pkg/apis/hive/v1alpha1"
 	"github.com/openshift/hive/pkg/constants"
 	"github.com/openshift/hive/pkg/resource"
 
@@ -155,21 +156,33 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// If no HiveConfig exists, the operator should create a default one, giving the controller
-	// something to sync on.
-	log.Debug("checking if HiveConfig 'hive' exists")
-	instance := &hivev1.HiveConfig{}
-	err = tempClient.Get(context.TODO(), types.NamespacedName{Name: hiveConfigName}, instance)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("no HiveConfig exists, creating default")
-		instance = &hivev1.HiveConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: hiveConfigName,
-			},
-		}
-		err = tempClient.Create(context.TODO(), instance)
-		if err != nil {
-			return err
+	v1MigrationNeeded, err := isV1MigrationNeeded(tempClient)
+	if err != nil {
+		log.WithError(err).Error("unable to check if migration is needed")
+		return err
+	}
+
+	if v1MigrationNeeded {
+		// One of the last steps in migration will be to copy to the v1 HiveConfig, allowing
+		// this controller to execute.
+		log.Warn("v1alpha1 HiveConfig exists, controller will idle until migration completes")
+	} else {
+		// If no HiveConfig exists, the operator should create a default one, giving the controller
+		// something to sync on.
+		log.Debug("checking if HiveConfig 'hive' exists")
+		instance := &hivev1.HiveConfig{}
+		err = tempClient.Get(context.TODO(), types.NamespacedName{Name: hiveConfigName}, instance)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("no HiveConfig exists, creating default")
+			instance = &hivev1.HiveConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: hiveConfigName,
+				},
+			}
+			err = tempClient.Create(context.TODO(), instance)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -223,11 +236,23 @@ func (r *ReconcileHiveConfig) Reconcile(request reconcile.Request) (reconcile.Re
 	hLog := log.WithField("controller", "hive")
 	hLog.Info("Reconciling Hive components")
 
+	// If for any reason there is both a v1 and v1alpha1 HiveConfig, this implies migration is needed
+	// and we should idle.
+	v1MigrationNeeded, err := isV1MigrationNeeded(r.Client)
+	if err != nil {
+		log.WithError(err).Error("unable to check if migration is needed")
+		return reconcile.Result{}, err
+	}
+	if v1MigrationNeeded {
+		log.Warn("skipping reconcile of v1 HiveConfig until v1alpha1 migration is complete")
+		return reconcile.Result{}, nil
+	}
+
 	// Fetch the Hive instance
 	instance := &hivev1.HiveConfig{}
 	// NOTE: ignoring the Namespace that seems to get set on request when syncing on namespaced objects,
 	// when our HiveConfig is ClusterScoped.
-	err := r.Get(context.TODO(), types.NamespacedName{Name: request.NamespacedName.Name}, instance)
+	err = r.Get(context.TODO(), types.NamespacedName{Name: request.NamespacedName.Name}, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -330,4 +355,18 @@ func computeHash(data map[string]string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(fmt.Sprintf("%v", data)))
 	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func isV1MigrationNeeded(c client.Client) (bool, error) {
+	legacyHiveConfig := &hivev1alpha1.HiveConfig{}
+	err := c.Get(context.TODO(), types.NamespacedName{Name: hiveConfigName}, legacyHiveConfig)
+	// If we found a v1alpha1 HiveConfig, migration is needed.
+	if err == nil {
+		return true, nil
+	}
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	// Unexpected error and we're not sure if we need migration or not.
+	return false, err
 }
