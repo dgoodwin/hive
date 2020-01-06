@@ -23,6 +23,7 @@ HIVE_TYPES=( checkpoints clusterdeployments clusterdeprovisionrequests clusterim
 for i in "${HIVE_TYPES[@]}"
 do
 	:
+	echo "Storing all ${i} in ${WORKDIR}/${i}.yaml"
 	oc get ${i}.hive.openshift.io -A -o json | jq '.items | .[] |
 		del(.status) |
 		del(.metadata.annotations."kubectl.kubernetes.io/last-applied-configuration") |
@@ -31,4 +32,17 @@ do
 		del(.metadata.resourceVersion) |
 		del(.metadata.selfLink) |
 		del(.metadata.uid)' > ${WORKDIR}/${i}.yaml
+done
+
+
+HIVE_TYPES=( checkpoints clusterdeployments clusterdeprovisionrequests clusterimagesets clusterprovisions clusterstates dnsendpoints dnszones hiveconfig selectorsyncidentityprovider selectorsyncset syncidentityprovider syncsetinstance syncset )
+for i in "${HIVE_TYPES[@]}"
+do
+	:
+	if [ -s ${WORKDIR}/${i}.yaml ]
+	then
+		echo "Removing finalizers from all ${i}"
+		oc get ${i}.hive.openshift.io -A -o json | jq '.items | .[] |
+			.metadata.finalizers = null' | oc apply -f -
+	fi
 done
