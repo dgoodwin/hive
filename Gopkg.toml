@@ -43,7 +43,7 @@ ignored = [
 
 [[override]]
   name="sigs.k8s.io/controller-runtime"
-  branch="release-0.2"
+  branch="release-0.4"
 
 [[override]]
   name="k8s.io/api"
