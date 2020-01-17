@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"k8s.io/client-go/kubernetes"
 	"net/url"
 	"strings"
 	"time"
@@ -46,10 +47,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/argoproj/argo-cd/common"
+
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"github.com/openshift/hive/pkg/constants"
 	hivemetrics "github.com/openshift/hive/pkg/controller/metrics"
 	controllerutils "github.com/openshift/hive/pkg/controller/utils"
+	"github.com/openshift/hive/pkg/remoteclient"
 	"github.com/openshift/hive/pkg/resource"
 )
 
@@ -65,21 +69,32 @@ const (
 // Add creates a new Argocdregister Controller and adds it to the Manager with default RBAC. The Manager will set fields on the
 // Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return AddToManager(mgr, NewReconciler(mgr))
+	kubeClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+	// TODO: tidy up init
+	r := NewReconciler(mgr, kubeClient)
+	r.remoteClientBuilder = func(cd *hivev1.ClusterDeployment) remoteclient.Builder {
+		return remoteclient.NewBuilder(r.Client, cd, controllerName)
+	}
+	return AddToManager(mgr, r)
 }
 
 // NewReconciler returns a new reconcile.Reconciler
-func NewReconciler(mgr manager.Manager) reconcile.Reconciler {
+func NewReconciler(mgr manager.Manager, kubeClient kubernetes.Interface) *ArgoCDRegisterController {
 	return &ArgoCDRegisterController{
 		Client:     controllerutils.NewClientWithMetricsOrDie(mgr, controllerName),
 		scheme:     mgr.GetScheme(),
 		restConfig: mgr.GetConfig(),
 		logger:     log.WithField("controller", controllerName),
+		kubeClient: kubeClient,
 	}
 }
 
 // AddToManager adds a new Controller to mgr with r as the reconcile.Reconciler
 func AddToManager(mgr manager.Manager, r reconcile.Reconciler) error {
+
 	// Create a new controller
 	c, err := controller.New("argocdregister-controller", mgr, controller.Options{Reconciler: r, MaxConcurrentReconciles: controllerutils.GetConcurrentReconciles()})
 	if err != nil {
@@ -100,9 +115,14 @@ var _ reconcile.Reconciler = &ArgoCDRegisterController{}
 // ArgoCDRegisterController reconciles the MachineSets generated from a ClusterDeployment object
 type ArgoCDRegisterController struct {
 	client.Client
+	kubeClient kubernetes.Interface
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 	logger     log.FieldLogger
+
+	// remoteClientBuilder is a function pointer to the function that gets a builder for building a client
+	// for the remote cluster's API server
+	remoteClientBuilder func(cd *hivev1.ClusterDeployment) remoteclient.Builder
 }
 
 // Reconcile checks if we can establish an API client connection to the remote cluster and maintains the unreachable condition as a result.
@@ -156,7 +176,7 @@ func (r *ArgoCDRegisterController) reconcileCluster(cd *hivev1.ClusterDeployment
 
 	if cd.Status.APIURL == "" {
 		cdLog.Info("Installed cluster does not have Status.APIURL set yet")
-		return reconcile.Result{}, fmt.Errorf("Installed cluster does not have Status.APIURL set yet")
+		return reconcile.Result{}, fmt.Errorf("installed cluster does not have Status.APIURL set yet")
 	}
 
 	h := resource.NewHelperFromRESTConfig(r.restConfig, cdLog)
@@ -176,11 +196,14 @@ func (r *ArgoCDRegisterController) reconcileCluster(cd *hivev1.ClusterDeployment
 		return reconcile.Result{}, err
 	}
 
-	managerBearerToken, err := r.loadArgoCDServiceAccountToken()
-	if err != nil {
-		cdLog.WithError(err).Error("unable to load argocd service account token")
-		return reconcile.Result{}, err
-	}
+	/*
+	   remoteClientBuilder := r.remoteClusterAPIClientBuilder(cd)
+	   // If the cluster is unreachable, do not reconcile.
+	   if remoteClientBuilder.Unreachable() {
+	       logger.Debug("skipping cluster with unreachable condition")
+	       return reconcile.Result{}, nil
+	   }
+	*/
 
 	// Parse the clusters kubeconfig so we can get the fields we need for argo's config:
 	config, err := clientcmd.Load([]byte(kubeconfig))
@@ -194,6 +217,20 @@ func (r *ArgoCDRegisterController) reconcileCluster(cd *hivev1.ClusterDeployment
 		cdLog.WithError(err).Error("unable to load client config")
 		return reconcile.Result{}, err
 	}
+
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		cdLog.WithError(err).Error("unable to create clientset for remote cluster")
+		return reconcile.Result{}, err
+	}
+	//managerBearerToken, err := r.loadArgoCDServiceAccountToken(clientset)
+	managerBearerToken, err := common.InstallClusterManagerRBAC(clientset)
+	if err != nil {
+		cdLog.WithError(err).Error("unable to load argocd service account token")
+		return reconcile.Result{}, err
+	}
+	// TODO: delete this. really.
+	cdLog.Debug("loaded manager bearer token: %s", managerBearerToken)
 
 	tlsClientConfig := TLSClientConfig{
 		Insecure:   cfg.TLSClientConfig.Insecure,
@@ -246,7 +283,8 @@ func (r *ArgoCDRegisterController) reconcileCluster(cd *hivev1.ClusterDeployment
 	return reconcile.Result{}, nil
 }
 
-func (r *ArgoCDRegisterController) loadArgoCDServiceAccountToken() (string, error) {
+func (r *ArgoCDRegisterController) loadArgoCDServiceAccountToken(clientset kubernetes.Interface) (string, error) {
+
 	serviceAccount := &corev1.ServiceAccount{}
 	err := r.Client.Get(context.Background(),
 		types.NamespacedName{
