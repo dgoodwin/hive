@@ -2783,6 +2783,20 @@ spec:
               items:
                 type: object
               type: array
+            argoCDConfig:
+              description: ArgoCD specifies configuration for ArgoCD integration.
+                If enabled, Hive will automatically add provisioned clusters to ArgoCD,
+                and remove them when they are deprovisioned.
+              properties:
+                enabled:
+                  description: Enabled dictates if ArgoCD gitops integration is enabled.
+                    If not specified, the default is disabled.
+                  type: boolean
+                namespace:
+                  description: Namespace specifies the namespace where ArgoCD is installed.
+                    Used for the location of cluster secrets.
+                  type: string
+              type: object
             backup:
               description: Backup specifies configuration for backup integration.
                 If absent, backup integration will be disabled.

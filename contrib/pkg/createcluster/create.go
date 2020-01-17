@@ -785,10 +785,6 @@ func (o *Options) GenerateClusterDeployment(pullSecret *corev1.Secret, sshPrivat
 		}
 	}
 
-	if o.DeleteAfter != "" {
-		cd.ObjectMeta.Annotations[deleteAfterAnnotation] = o.DeleteAfter
-	}
-
 	return cd, nil
 }
 

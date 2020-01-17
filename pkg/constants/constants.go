@@ -11,6 +11,9 @@ const (
 	// VeleroBackupEnvVar is the name of the environment variable used to tell the controller manager to enable velero backup integration.
 	VeleroBackupEnvVar = "HIVE_VELERO_BACKUP"
 
+	// ArgoCDEnvVar is the name of the environment variable used to tell the controller manager to enable ArgoCD integration.
+	ArgoCDEnvVar = "HIVE_ARGOCD"
+
 	// MinBackupPeriodSecondsEnvVar is the name of the environment variable used to tell the controller manager the minimum period of time between backups.
 	MinBackupPeriodSecondsEnvVar = "HIVE_MIN_BACKUP_PERIOD_SECONDS"
 
@@ -26,6 +29,10 @@ const (
 
 	// UninstallJobLabel is the label used for artifacts specific to Hive cluster deprovision.
 	UninstallJobLabel = "hive.openshift.io/uninstall"
+
+	// CreatedByHiveLabel is the label used for artifacts for external systems we integrate with
+	// that were created by Hive. The value for this label should be "true".
+	CreatedByHiveLabel = "hive.openshift.io/created-by"
 
 	// ClusterDeploymentNameLabel is the label that is used to identify the installer pod of a particular cluster deployment
 	ClusterDeploymentNameLabel = "hive.openshift.io/cluster-deployment-name"

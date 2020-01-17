@@ -35,6 +35,10 @@ type HiveConfigSpec struct {
 	// FailedProvisionConfig is used to configure settings related to handling provision failures.
 	FailedProvisionConfig FailedProvisionConfig `json:"failedProvisionConfig"`
 
+	// ArgoCD specifies configuration for ArgoCD integration. If enabled, Hive will automatically add provisioned
+	// clusters to ArgoCD, and remove them when they are deprovisioned.
+	ArgoCD ArgoCDConfig `json:"argoCDConfig,omitempty"`
+
 	// LogLevel is the level of logging to use for the Hive controllers.
 	// Acceptable levels, from coarsest to finest, are panic, fatal, error, warn, info, debug, and trace.
 	// The default level is info.
@@ -48,6 +52,16 @@ type HiveConfigStatus struct {
 	// configmap data from the openshift-config-managed namespace. When the configmap changes,
 	// admission is redeployed.
 	AggregatorClientCAHash string `json:"aggregatorClientCAHash,omitempty"`
+}
+
+// ArgoCDConfig contains settings for integration with ArgoCD.
+type ArgoCDConfig struct {
+	// Enabled dictates if ArgoCD gitops integration is enabled.
+	// If not specified, the default is disabled.
+	Enabled bool `json:"enabled"`
+
+	// Namespace specifies the namespace where ArgoCD is installed. Used for the location of cluster secrets.
+	Namespace string `json:"namespace"`
 }
 
 // BackupConfig contains settings for the Velero backup integration.
