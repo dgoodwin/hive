@@ -47,7 +47,8 @@ ignored = [
 
 [[override]]
   name="k8s.io/api"
-  version="kubernetes-1.14.1"
+  #version="kubernetes-1.16.0"
+  branch = "release-1.17"
 
 [[override]]
   name="github.com/russross/blackfriday"
@@ -55,23 +56,48 @@ ignored = [
 
 [[override]]
   name="k8s.io/kubernetes"
-  version="=v1.14.1"
+  #version="=v1.14.1"
+  branch = "release-1.17"
 
 [[override]]
   name="k8s.io/metrics"
-  version="kubernetes-1.14.1"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
 
 [[override]]
   name="k8s.io/apimachinery"
-  version="kubernetes-1.14.1"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
 
 [[override]]
   name="k8s.io/kube-aggregator"
-  version="kubernetes-1.14.1"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
 
 [[override]]
   name="k8s.io/cli-runtime"
-  version="kubernetes-1.14.1"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
+
+[[override]]
+  name = "k8s.io/client-go"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
+
+[[override]]
+  name = "k8s.io/apiserver"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
+
+[[override]]
+  name="k8s.io/apiextensions-apiserver"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
+
+[[override]]
+  name = "k8s.io/code-generator"
+  #version="kubernetes-1.14.1"
+  branch = "release-1.17"
 
 [[override]]
   name="k8s.io/kube-openapi"
@@ -99,10 +125,6 @@ version="v1.4.7"
   name = "github.com/heptio/velero"
   version = "v1.0.0"
 
-[[override]]
-  name = "k8s.io/client-go"
-  version="kubernetes-1.14.1"
-
 [[constraint]]
   name = "github.com/openshift/installer"
   revision = "6fdffbb9c21d90ba97fc79dff3ccbeac22fb2a0e"
@@ -113,12 +135,10 @@ version="v1.4.7"
 
 [[constraint]]
   name = "github.com/openshift/generic-admission-server"
-  version = "v1.14.0"
+  # version = "v1.14.0"
   # branch = "release-1.13" # TODO: Can't use "version" for v1.13.2 as that release is broken. Go back to using version when fixed.
-
-[[override]]
-  name = "k8s.io/apiserver"
-  version="kubernetes-1.14.1"
+  # master is up to 1.16, lets try that:
+  revision = "92cbaa8d51b1b9fa33a7eda76683b3482590e534"
 
 [[override]]
   name = "github.com/evanphx/json-patch"
@@ -141,14 +161,11 @@ version="v1.4.7"
   name = "github.com/jteeuwen/go-bindata"
   revision = "a0ff2567cfb70903282db057e799fd826784d41d"
 
-[[override]]
-  name="k8s.io/apiextensions-apiserver"
-  version="kubernetes-1.14.1"
-
 [[constraint]]
   name = "github.com/golang/mock"
   version = "1.2.0"
 
-[[override]]
-  name = "k8s.io/code-generator"
-  version="kubernetes-1.14.1"
+[[constraint]]
+  name = "github.com/argoproj/argo-cd"
+  version = "v1.4.0-rc1"
+
