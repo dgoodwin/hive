@@ -387,6 +387,26 @@ func (r *ReconcileClusterDeployment) reconcile(request reconcile.Request, cd *hi
 
 		cdLog.Debug("cluster is already installed, no processing of provision needed")
 		r.cleanupInstallLogPVC(cd, cdLog)
+
+		if cd.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name != "" && (cd.Status.WebConsoleURL == "" || cd.Status.APIURL == "") {
+			adminKubeconfigSecret := &corev1.Secret{}
+			if err := r.Get(context.Background(), types.NamespacedName{Namespace: cd.Namespace, Name: cd.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name}, adminKubeconfigSecret); err != nil {
+				cdLog.WithError(err).Error("failed to get admin kubeconfig secret")
+				return reconcile.Result{}, err
+			}
+			if err := r.fixupAdminKubeconfigSecret(adminKubeconfigSecret, cdLog); err != nil {
+				cdLog.WithError(err).Error("failed to fix up admin kubeconfig secret")
+				return reconcile.Result{}, err
+			}
+			if err := r.setAdminKubeconfigStatus(cd, cdLog); err != nil {
+				cdLog.WithError(err).Error("failed to set admin kubeconfig status")
+				return reconcile.Result{}, err
+			}
+			if err := r.Status().Update(context.TODO(), cd); err != nil {
+				cdLog.WithError(err).Log(controllerutils.LogLevel(err), "could not set installed status")
+				return reconcile.Result{}, err
+			}
+		}
 		return reconcile.Result{}, nil
 	}
 

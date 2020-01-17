@@ -1308,6 +1308,8 @@ func testInstalledClusterDeployment(installedAt time.Time) *hivev1.ClusterDeploy
 	cd := testClusterDeployment()
 	cd.Spec.Installed = true
 	cd.Status.InstalledTimestamp = &metav1.Time{Time: installedAt}
+	cd.Status.APIURL = "http://quite.fake.com"
+	cd.Status.WebConsoleURL = "http://quite.fake.com/console"
 	return cd
 }
 
