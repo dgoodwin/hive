@@ -22,11 +22,10 @@ const (
 	// image is specified through a ClusterImageSet reference or on the ClusterDeployment itself.
 	DefaultInstallerImage = "registry.svc.ci.openshift.org/openshift/origin-v4.0:installer"
 
-	tryUninstallOnceAnnotation = "hive.openshift.io/try-uninstall-once"
-	azureAuthDir               = "/.azure"
-	azureAuthFile              = azureAuthDir + "/osServicePrincipal.json"
-	gcpAuthDir                 = "/.gcp"
-	gcpAuthFile                = gcpAuthDir + "/" + constants.GCPCredentialsName
+	azureAuthDir  = "/.azure"
+	azureAuthFile = azureAuthDir + "/osServicePrincipal.json"
+	gcpAuthDir    = "/.gcp"
+	gcpAuthFile   = gcpAuthDir + "/" + constants.GCPCredentialsName
 
 	// SSHPrivateKeyDir is the directory where the generated Job will mount the ssh secret to
 	SSHPrivateKeyDir = "/sshkeys"
@@ -378,16 +377,7 @@ func GetUninstallJobName(name string) string {
 func GenerateUninstallerJobForDeprovision(
 	req *hivev1.ClusterDeprovision) (*batchv1.Job, error) {
 
-	tryOnce := false
-	if req.Annotations != nil {
-		value, exists := req.Annotations[tryUninstallOnceAnnotation]
-		tryOnce = exists && value == "true"
-	}
-
 	restartPolicy := corev1.RestartPolicyOnFailure
-	if tryOnce {
-		restartPolicy = corev1.RestartPolicyNever
-	}
 
 	podSpec := corev1.PodSpec{
 		DNSPolicy:     corev1.DNSClusterFirst,

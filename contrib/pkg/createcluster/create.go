@@ -3,6 +3,7 @@ package createcluster
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/openshift/hive/pkg/cluster"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -75,13 +76,10 @@ obtained from a the following URL:
 https://openshift-release.svc.ci.openshift.org/api/v1/releasestream/4-stable/latest
 `
 const (
-	deleteAfterAnnotation      = "hive.openshift.io/delete-after"
-	tryInstallOnceAnnotation   = "hive.openshift.io/try-install-once"
-	tryUninstallOnceAnnotation = "hive.openshift.io/try-uninstall-once"
-	hiveutilCreatedLabel       = "hive.openshift.io/hiveutil-created"
-	cloudAWS                   = "aws"
-	cloudAzure                 = "azure"
-	cloudGCP                   = "gcp"
+	hiveutilCreatedLabel = "hive.openshift.io/hiveutil-created"
+	cloudAWS             = "aws"
+	cloudAzure           = "azure"
+	cloudGCP             = "gcp"
 
 	testFailureManifest = `apiVersion: v1
 kind: NotARealSecret
@@ -369,17 +367,37 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, err
 	}
 
-	pullSecretSecret, err := o.generatePullSecret(pullSecret)
+	sshPrivateKey, err := o.getSSHPrivateKey()
 	if err != nil {
 		return nil, err
 	}
 
-	sshPrivateKeySecret, err := o.generateSSHPrivateKeySecret()
+	generator := cluster.Generator{
+		Name:          o.Name,
+		Namespace:     o.Namespace,
+		PullSecret:    pullSecret,
+		SSHPrivateKey: sshPrivateKey,
+		InstallOnce:   o.InstallOnce,
+		BaseDomain:    o.BaseDomain,
+		ManageDNS:     o.ManageDNS,
+		DeleteAfter:   o.DeleteAfter,
+	}
+
+	// NOTE: Secrets added to result slice below.
+
+	pullSecretSecret, err := generator.GeneratePullSecretSecret()
 	if err != nil {
 		return nil, err
 	}
 
-	cd, err := o.GenerateClusterDeployment(pullSecretSecret, sshPrivateKeySecret)
+	sshPrivateKeySecret, err := generator.GenerateSSHPrivateKeySecret()
+	if err != nil {
+		return nil, err
+	}
+
+	cd, err := generator.GenerateClusterDeployment(map[string]string{
+		hiveutilCreatedLabel: "true",
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -604,26 +622,6 @@ func (o *Options) getPullSecret() (string, error) {
 	return "", nil
 }
 
-func (o *Options) generatePullSecret(pullSecret string) (*corev1.Secret, error) {
-	if len(pullSecret) == 0 {
-		return nil, nil
-	}
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-pull-secret", o.Name),
-			Namespace: o.Namespace,
-		},
-		Type: corev1.SecretTypeDockerConfigJson,
-		StringData: map[string]string{
-			corev1.DockerConfigJsonKey: pullSecret,
-		},
-	}, nil
-}
-
 func (o *Options) getSSHPublicKey() (string, error) {
 	sshPublicKey := os.Getenv("PUBLIC_SSH_KEY")
 	if len(sshPublicKey) > 0 {
@@ -658,31 +656,6 @@ func (o *Options) getSSHPrivateKey() (string, error) {
 	}
 	log.Debug("No private SSH key file provided")
 	return "", nil
-}
-
-func (o *Options) generateSSHPrivateKeySecret() (*corev1.Secret, error) {
-	sshPrivateKey, err := o.getSSHPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	if sshPrivateKey == "" {
-		return nil, nil
-	}
-
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-ssh-private-key", o.Name),
-			Namespace: o.Namespace,
-		},
-		Type: corev1.SecretTypeOpaque,
-		StringData: map[string]string{
-			"ssh-privatekey": sshPrivateKey,
-		},
-	}, nil
 }
 
 func (o *Options) generateServingCertSecret() (*corev1.Secret, error) {
@@ -751,68 +724,6 @@ func (o *Options) generateManifestsConfigMap() (*corev1.ConfigMap, error) {
 		}
 	}
 	return cm, nil
-}
-
-// GenerateClusterDeployment generates a new cluster deployment
-func (o *Options) GenerateClusterDeployment(pullSecret *corev1.Secret, sshPrivateKeySecret *corev1.Secret) (*hivev1.ClusterDeployment, error) {
-	cd := &hivev1.ClusterDeployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ClusterDeployment",
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        o.Name,
-			Namespace:   o.Namespace,
-			Annotations: map[string]string{},
-			Labels: map[string]string{
-				hiveutilCreatedLabel: "true",
-			},
-		},
-		Spec: hivev1.ClusterDeploymentSpec{
-			ClusterName:  o.Name,
-			BaseDomain:   o.BaseDomain,
-			ManageDNS:    o.ManageDNS,
-			Provisioning: &hivev1.Provisioning{},
-		},
-	}
-
-	if sshPrivateKeySecret != nil {
-		cd.Spec.Provisioning.SSHPrivateKeySecretRef = &corev1.LocalObjectReference{Name: sshPrivateKeySecret.Name}
-	}
-
-	if o.InstallOnce {
-		cd.Annotations[tryInstallOnceAnnotation] = "true"
-	}
-	if o.UninstallOnce {
-		cd.Annotations[tryUninstallOnceAnnotation] = "true"
-	}
-	if pullSecret != nil {
-		cd.Spec.PullSecretRef = &corev1.LocalObjectReference{Name: pullSecret.Name}
-	}
-	if len(o.ServingCert) > 0 {
-		cd.Spec.CertificateBundles = []hivev1.CertificateBundleSpec{
-			{
-				Name: "serving-cert",
-				CertificateSecretRef: corev1.LocalObjectReference{
-					Name: fmt.Sprintf("%s-serving-cert", o.Name),
-				},
-			},
-		}
-		cd.Spec.ControlPlaneConfig.ServingCertificates.Default = "serving-cert"
-		cd.Spec.Ingress = []hivev1.ClusterIngress{
-			{
-				Name:               "default",
-				Domain:             fmt.Sprintf("apps.%s.%s", o.Name, o.BaseDomain),
-				ServingCertificate: "serving-cert",
-			},
-		}
-	}
-
-	if o.DeleteAfter != "" {
-		cd.ObjectMeta.Annotations[deleteAfterAnnotation] = o.DeleteAfter
-	}
-
-	return cd, nil
 }
 
 func (o *Options) configureImages(cd *hivev1.ClusterDeployment) (*hivev1.ClusterImageSet, error) {
