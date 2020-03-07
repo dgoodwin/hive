@@ -396,6 +396,42 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		DeleteAfter:    o.DeleteAfter,
 		ServingCert:    string(servingCert),
 		ServingCertKey: string(servingCertKey),
+		Labels: map[string]string{
+			hiveutilCreatedLabel: "true",
+		},
+	}
+	if o.Adopt {
+		cd.Spec.Installed = true
+
+		kubeconfigBytes, err := ioutil.ReadFile(o.AdoptAdminKubeConfig)
+		if err != nil {
+			return nil, err
+		}
+		generator.Adopt = o.Adopt
+		generator.AdoptInfraID = o.AdoptInfraID
+		generator.AdoptClusterID = o.AdoptClusterID
+		generator.AdoptAdminKubeconfig = kubeconfigBytes
+
+		objectsToCreate = append(objectsToCreate, adminKubeconfigSecret)
+
+		if o.AdoptAdminUsername != "" {
+			adminPasswordSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s-adopted-admin-password", cd.Name),
+					Namespace: cd.Namespace,
+				},
+				StringData: map[string]string{
+					"username": o.AdoptAdminUsername,
+					"password": o.AdoptAdminPassword,
+				},
+			}
+			objectsToCreate = append(objectsToCreate, adminPasswordSecret)
+			cd.Spec.ClusterMetadata.AdminPasswordSecretRef = corev1.LocalObjectReference{
+				Name: adminPasswordSecret.Name,
+			}
+		}
+
+		return objectsToCreate, nil
 	}
 
 	// NOTE: Secrets added to result slice below.
@@ -415,19 +451,9 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, err
 	}
 
-	cd, err := generator.GenerateClusterDeployment(map[string]string{
-		hiveutilCreatedLabel: "true",
-	})
+	cd, err := generator.GenerateClusterDeployment()
 	if err != nil {
 		return nil, err
-	}
-
-	if o.Adopt {
-		newObjects, err := o.addAdoptionInfo(cd)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, newObjects...)
 	}
 
 	sshPublicKey, err := o.getSSHPublicKey()
@@ -520,9 +546,7 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	}
 
 	if o.IncludeSecrets {
-		if pullSecretSecret != nil {
-			result = append(result, pullSecretSecret)
-		}
+		// TODO: skip secrets?
 
 		// If the user provided a pre-existing creds secret we can skip this step.
 		if o.CredsSecret == "" {
@@ -533,13 +557,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 			result = append(result, creds)
 		}
 
-		if sshPrivateKeySecret != nil {
-			result = append(result, sshPrivateKeySecret)
-		}
-
-		if servingCertSecret != nil {
-			result = append(result, servingCertSecret)
-		}
 	}
 
 	result = append(result, installConfigSecret, cd, computePool)
@@ -552,49 +569,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 }
 
 func (o *Options) addAdoptionInfo(cd *hivev1.ClusterDeployment) ([]runtime.Object, error) {
-	objectsToCreate := []runtime.Object{}
-	cd.Spec.Installed = true
-
-	kubeconfigBytes, err := ioutil.ReadFile(o.AdoptAdminKubeConfig)
-	if err != nil {
-		return objectsToCreate, err
-	}
-
-	adminKubeconfigSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-adopted-admin-kubeconfig", cd.Name),
-			Namespace: cd.Namespace,
-		},
-		Data: map[string][]byte{
-			"kubeconfig":     kubeconfigBytes,
-			"raw-kubeconfig": kubeconfigBytes,
-		},
-	}
-	objectsToCreate = append(objectsToCreate, adminKubeconfigSecret)
-	cd.Spec.ClusterMetadata = &hivev1.ClusterMetadata{
-		ClusterID:                o.AdoptClusterID,
-		InfraID:                  o.AdoptInfraID,
-		AdminKubeconfigSecretRef: corev1.LocalObjectReference{Name: adminKubeconfigSecret.Name},
-	}
-
-	if o.AdoptAdminUsername != "" {
-		adminPasswordSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-adopted-admin-password", cd.Name),
-				Namespace: cd.Namespace,
-			},
-			StringData: map[string]string{
-				"username": o.AdoptAdminUsername,
-				"password": o.AdoptAdminPassword,
-			},
-		}
-		objectsToCreate = append(objectsToCreate, adminPasswordSecret)
-		cd.Spec.ClusterMetadata.AdminPasswordSecretRef = corev1.LocalObjectReference{
-			Name: adminPasswordSecret.Name,
-		}
-	}
-
-	return objectsToCreate, nil
 }
 
 func (o *Options) generateInstallConfigSecret(ic *installertypes.InstallConfig) (*corev1.Secret, error) {

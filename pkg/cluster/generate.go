@@ -5,6 +5,7 @@ import (
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -21,6 +22,9 @@ type Generator struct {
 
 	// Namespace where the ClusterDeployment and all associated artifacts will be created.
 	Namespace string
+
+	// Labels are labels to be added to the ClusterDeployment.
+	Labels map[string]string
 
 	// PullSecret is the secret to use when pulling images.
 	PullSecret string
@@ -48,10 +52,47 @@ type Generator struct {
 
 	// ServingCertKey is the contents of a key for the ServingCert.
 	ServingCertKey string
+
+	// Adopt is a flag indicating we're adopting a pre-existing cluster.
+	Adopt bool
+
+	// AdoptAdminKubeconfig is a cluster administrator admin kubeconfig typically obtained
+	// from openshift-install. Should be set when adopting pre-existing clusters.
+	AdoptAdminKubeconfig []byte
+
+	// AdoptClusterID is the unique generated ID for a cluster being adopted.
+	AdoptClusterID string
+
+	// AdoptInfraID is the unique generated infrastructure ID for a cluster being adopted.
+	AdoptInfraID string
+}
+
+func (o *Generator) GenerateAll() []runtime.Object {
+	allObjects := []runtime.Object{}
+	allObjects = append(allObjects, o.GenerateClusterDeployment())
+
+	// TODO: maintain "include secrets" flag functionality?
+	pullSecretSecret := o.GeneratePullSecretSecret()
+	if pullSecretSecret != nil {
+		allObjects = append(allObjects, pullSecretSecret)
+	}
+	sshPrivateKeySecret := o.GenerateSSHPrivateKeySecret()
+	if sshPrivateKeySecret != nil {
+		allObjects = append(allObjects, sshPrivateKeySecret)
+	}
+	servingCertSecret := o.GenerateServingCertSecret()
+	if servingCertSecret != nil {
+		allObjects = append(allObjects, servingCertSecret)
+	}
+
+	if o.Adopt {
+		allObjects = append(allObjects, o.GenerateAdminKubeconfigSecret())
+	}
+	return allObjects
 }
 
 // GenerateClusterDeployment generates a new cluster deployment
-func (o *Generator) GenerateClusterDeployment(labels map[string]string) (*hivev1.ClusterDeployment, error) {
+func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 	cd := &hivev1.ClusterDeployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterDeployment",
@@ -61,7 +102,7 @@ func (o *Generator) GenerateClusterDeployment(labels map[string]string) (*hivev1
 			Name:        o.Name,
 			Namespace:   o.Namespace,
 			Annotations: map[string]string{},
-			Labels:      labels,
+			Labels:      o.Labels,
 		},
 		Spec: hivev1.ClusterDeploymentSpec{
 			ClusterName:  o.Name,
@@ -106,14 +147,22 @@ func (o *Generator) GenerateClusterDeployment(labels map[string]string) (*hivev1
 		cd.ObjectMeta.Annotations[deleteAfterAnnotation] = o.DeleteAfter
 	}
 
-	return cd, nil
+	if o.Adopt {
+		cd.Spec.ClusterMetadata = &hivev1.ClusterMetadata{
+			ClusterID:                o.AdoptClusterID,
+			InfraID:                  o.AdoptInfraID,
+			AdminKubeconfigSecretRef: corev1.LocalObjectReference{Name: o.getAdoptAdminKubeconfigSecretName()},
+		}
+	}
+
+	return cd
 }
 
 // GeneratePullSecretSecret returns a Kubernetes Secret containing the pull secret to be
 // used for pulling images.
-func (o *Generator) GeneratePullSecretSecret() (*corev1.Secret, error) {
+func (o *Generator) GeneratePullSecretSecret() *corev1.Secret {
 	if len(o.PullSecret) == 0 {
-		return nil, nil
+		return nil
 	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -128,14 +177,14 @@ func (o *Generator) GeneratePullSecretSecret() (*corev1.Secret, error) {
 		StringData: map[string]string{
 			corev1.DockerConfigJsonKey: o.PullSecret,
 		},
-	}, nil
+	}
 }
 
 // GenerateSSHPrivateKeySecret returns a Kubernetes Secret containing the SSH private
 // key to be used.
-func (o *Generator) GenerateSSHPrivateKeySecret() (*corev1.Secret, error) {
+func (o *Generator) GenerateSSHPrivateKeySecret() *corev1.Secret {
 	if o.SSHPrivateKey == "" {
-		return nil, nil
+		return nil
 	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
@@ -150,17 +199,17 @@ func (o *Generator) GenerateSSHPrivateKeySecret() (*corev1.Secret, error) {
 		StringData: map[string]string{
 			"ssh-privatekey": o.SSHPrivateKey,
 		},
-	}, nil
+	}
 }
 
-func (o *Generator) GenerateServingCertSecret() (*corev1.Secret, error) {
+func (o *Generator) GenerateServingCertSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
 			APIVersion: corev1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-serving-cert", o.Name),
+			Name:      o.getServingCertSecretName(),
 			Namespace: o.Namespace,
 		},
 		Type: corev1.SecretTypeTLS,
@@ -168,7 +217,28 @@ func (o *Generator) GenerateServingCertSecret() (*corev1.Secret, error) {
 			"tls.crt": string(o.ServingCert),
 			"tls.key": string(o.ServingCertKey),
 		},
-	}, nil
+	}
+}
+
+func (o *Generator) GenerateAdminKubeconfigSecret() *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      o.getAdoptAdminKubeconfigSecretName(),
+			Namespace: o.Namespace,
+		},
+		Data: map[string][]byte{
+			"kubeconfig":     o.AdoptAdminKubeconfig,
+			"raw-kubeconfig": o.AdoptAdminKubeconfig,
+		},
+	}
+}
+
+func (o *Generator) getServingCertSecretName() string {
+	return fmt.Sprintf("%s-serving-cert", o.Name)
+}
+
+func (o *Generator) getAdoptAdminKubeconfigSecretName() string {
+	return fmt.Sprintf("%s-adopted-admin-kubeconfig", o.Name)
 }
 
 // TODO: handle long cluster names.
