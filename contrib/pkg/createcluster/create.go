@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,7 +25,6 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	"github.com/openshift/installer/pkg/ipnet"
 	installertypes "github.com/openshift/installer/pkg/types"
 
 	"github.com/openshift/hive/pkg/apis"
@@ -360,7 +358,6 @@ func (o *Options) getResourceHelper() (*resource.Helper, error) {
 
 // GenerateObjects generates resources for a new cluster deployment
 func (o *Options) GenerateObjects() ([]runtime.Object, error) {
-	result := []runtime.Object{}
 
 	pullSecret, err := o.getPullSecret()
 	if err != nil {
@@ -368,6 +365,11 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	}
 
 	sshPrivateKey, err := o.getSSHPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	sshPublicKey, err := o.getSSHPublicKey()
 	if err != nil {
 		return nil, err
 	}
@@ -386,23 +388,23 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	}
 
 	generator := cluster.Generator{
-		Name:           o.Name,
-		Namespace:      o.Namespace,
-		PullSecret:     pullSecret,
-		SSHPrivateKey:  sshPrivateKey,
-		InstallOnce:    o.InstallOnce,
-		BaseDomain:     o.BaseDomain,
-		ManageDNS:      o.ManageDNS,
-		DeleteAfter:    o.DeleteAfter,
-		ServingCert:    string(servingCert),
-		ServingCertKey: string(servingCertKey),
+		Name:             o.Name,
+		Namespace:        o.Namespace,
+		WorkerNodesCount: o.WorkerNodes,
+		PullSecret:       pullSecret,
+		SSHPrivateKey:    sshPrivateKey,
+		SSHPublicKey:     sshPublicKey,
+		InstallOnce:      o.InstallOnce,
+		BaseDomain:       o.BaseDomain,
+		ManageDNS:        o.ManageDNS,
+		DeleteAfter:      o.DeleteAfter,
+		ServingCert:      string(servingCert),
+		ServingCertKey:   string(servingCertKey),
 		Labels: map[string]string{
 			hiveutilCreatedLabel: "true",
 		},
 	}
 	if o.Adopt {
-		cd.Spec.Installed = true
-
 		kubeconfigBytes, err := ioutil.ReadFile(o.AdoptAdminKubeConfig)
 		if err != nil {
 			return nil, err
@@ -411,8 +413,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		generator.AdoptInfraID = o.AdoptInfraID
 		generator.AdoptClusterID = o.AdoptClusterID
 		generator.AdoptAdminKubeconfig = kubeconfigBytes
-
-		objectsToCreate = append(objectsToCreate, adminKubeconfigSecret)
 
 		if o.AdoptAdminUsername != "" {
 			adminPasswordSecret := &corev1.Secret{
@@ -432,70 +432,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		}
 
 		return objectsToCreate, nil
-	}
-
-	// NOTE: Secrets added to result slice below.
-
-	pullSecretSecret, err := generator.GeneratePullSecretSecret()
-	if err != nil {
-		return nil, err
-	}
-
-	sshPrivateKeySecret, err := generator.GenerateSSHPrivateKeySecret()
-	if err != nil {
-		return nil, err
-	}
-
-	servingCertSecret, err := generator.GenerateServingCertSecret()
-	if err != nil {
-		return nil, err
-	}
-
-	cd, err := generator.GenerateClusterDeployment()
-	if err != nil {
-		return nil, err
-	}
-
-	sshPublicKey, err := o.getSSHPublicKey()
-	if err != nil {
-		return nil, err
-	}
-
-	// Platform info will be injected by o.cloudProvider
-	installConfig := &installertypes.InstallConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: o.Name,
-		},
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: installertypes.InstallConfigVersion,
-		},
-		SSHKey:     sshPublicKey,
-		BaseDomain: o.BaseDomain,
-		Networking: &installertypes.Networking{
-			NetworkType:    "OpenShiftSDN",
-			ServiceNetwork: []ipnet.IPNet{*ipnet.MustParseCIDR("172.30.0.0/16")},
-			ClusterNetwork: []installertypes.ClusterNetworkEntry{
-				{
-					CIDR:       *ipnet.MustParseCIDR("10.128.0.0/14"),
-					HostPrefix: 23,
-				},
-			},
-			MachineNetwork: []installertypes.MachineNetworkEntry{
-				{
-					CIDR: *ipnet.MustParseCIDR("10.0.0.0/16"),
-				},
-			},
-		},
-		ControlPlane: &installertypes.MachinePool{
-			Name:     "master",
-			Replicas: pointer.Int64Ptr(3),
-		},
-		Compute: []installertypes.MachinePool{
-			{
-				Name:     "worker",
-				Replicas: &o.WorkerNodes,
-			},
-		},
 	}
 
 	computePool := &hivev1.MachinePool{
@@ -519,12 +455,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	if err := o.cloudProvider.addPlatformDetails(o, cd, computePool, installConfig); err != nil {
 		return nil, err
 	}
-
-	installConfigSecret, err := o.generateInstallConfigSecret(installConfig)
-	if err != nil {
-		return nil, err
-	}
-	cd.Spec.Provisioning.InstallConfigSecretRef = corev1.LocalObjectReference{Name: installConfigSecret.Name}
 
 	manifestsConfigMap, err := o.generateManifestsConfigMap()
 	if err != nil {
@@ -561,35 +491,22 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 
 	result = append(result, installConfigSecret, cd, computePool)
 
+	result, err := generator.GenerateAll()
+	if err != nil {
+		return result, err
+	}
+
 	if o.CreateSampleSyncsets {
 		result = append(result, o.generateSampleSyncSets()...)
 	}
 
-	return result, err
+	return result, nil
 }
 
 func (o *Options) addAdoptionInfo(cd *hivev1.ClusterDeployment) ([]runtime.Object, error) {
 }
 
 func (o *Options) generateInstallConfigSecret(ic *installertypes.InstallConfig) (*corev1.Secret, error) {
-	d, err := yaml.Marshal(ic)
-	if err != nil {
-		return nil, err
-	}
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-install-config", o.Name),
-			Namespace: o.Namespace,
-		},
-		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			"install-config.yaml": d,
-		},
-	}, nil
 }
 
 func (o *Options) getPullSecret() (string, error) {

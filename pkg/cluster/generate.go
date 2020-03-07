@@ -2,10 +2,14 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/ghodss/yaml"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	"github.com/openshift/installer/pkg/ipnet"
+	installertypes "github.com/openshift/installer/pkg/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/pointer"
 )
 
 const (
@@ -33,11 +37,18 @@ type Generator struct {
 	// typically be read from ~/.ssh/id_rsa.
 	SSHPrivateKey string
 
+	// SSHPrivateKey is an optional public SSH key to configure on hosts in the cluster. This would
+	// typically be read from ~/.ssh/id_rsa.pub. Must match the SSHPrivateKey.
+	SSHPublicKey string
+
 	// InstallOnce indicates that the provision job should not be retried on failure.
 	InstallOnce bool
 
 	// BaseDomain is the DNS base domain to be used for the cluster.
 	BaseDomain string
+
+	// WorkerNodesCount is the number of worker nodes to create in the cluster initially.
+	WorkerNodesCount int64
 
 	// ManageDNS can be set to true to enable Hive's automatic DNS zone creation and forwarding. (assuming
 	// this is properly configured in HiveConfig)
@@ -67,9 +78,14 @@ type Generator struct {
 	AdoptInfraID string
 }
 
-func (o *Generator) GenerateAll() []runtime.Object {
+func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	allObjects := []runtime.Object{}
 	allObjects = append(allObjects, o.GenerateClusterDeployment())
+	installConfigSecret, err := o.GenerateInstallConfigSecret()
+	if err != nil {
+		return nil, err
+	}
+	allObjects = append(allObjects, installConfigSecret)
 
 	// TODO: maintain "include secrets" flag functionality?
 	pullSecretSecret := o.GeneratePullSecretSecret()
@@ -88,7 +104,7 @@ func (o *Generator) GenerateAll() []runtime.Object {
 	if o.Adopt {
 		allObjects = append(allObjects, o.GenerateAdminKubeconfigSecret())
 	}
-	return allObjects
+	return allObjects, nil
 }
 
 // GenerateClusterDeployment generates a new cluster deployment
@@ -153,9 +169,74 @@ func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 			InfraID:                  o.AdoptInfraID,
 			AdminKubeconfigSecretRef: corev1.LocalObjectReference{Name: o.getAdoptAdminKubeconfigSecretName()},
 		}
+		cd.Spec.Installed = true
 	}
 
+	cd.Spec.Provisioning.InstallConfigSecretRef = corev1.LocalObjectReference{Name: o.getInstallConfigSecretName()}
+
 	return cd
+}
+
+func (o *Generator) GenerateInstallConfigSecret() (*corev1.Secret, error) {
+	// Platform info will be injected by o.cloudProvider
+	installConfig := &installertypes.InstallConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: o.Name,
+		},
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: installertypes.InstallConfigVersion,
+		},
+		SSHKey:     o.SSHPublicKey,
+		BaseDomain: o.BaseDomain,
+		Networking: &installertypes.Networking{
+			NetworkType:    "OpenShiftSDN",
+			ServiceNetwork: []ipnet.IPNet{*ipnet.MustParseCIDR("172.30.0.0/16")},
+			ClusterNetwork: []installertypes.ClusterNetworkEntry{
+				{
+					CIDR:       *ipnet.MustParseCIDR("10.128.0.0/14"),
+					HostPrefix: 23,
+				},
+			},
+			MachineNetwork: []installertypes.MachineNetworkEntry{
+				{
+					CIDR: *ipnet.MustParseCIDR("10.0.0.0/16"),
+				},
+			},
+		},
+		ControlPlane: &installertypes.MachinePool{
+			Name:     "master",
+			Replicas: pointer.Int64Ptr(3),
+		},
+		Compute: []installertypes.MachinePool{
+			{
+				Name:     "worker",
+				Replicas: &o.WorkerNodesCount,
+			},
+		},
+	}
+
+	d, err := yaml.Marshal(installConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      o.getInstallConfigSecretName(),
+			Namespace: o.Namespace,
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"install-config.yaml": d,
+		},
+	}, nil
+}
+
+func (o *Generator) getInstallConfigSecretName() string {
+	return fmt.Sprintf("%s-install-config", o.Name)
 }
 
 // GeneratePullSecretSecret returns a Kubernetes Secret containing the pull secret to be
