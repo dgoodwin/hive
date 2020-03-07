@@ -372,15 +372,30 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, err
 	}
 
+	if len(o.ServingCert) == 0 {
+		return nil, nil
+	}
+
+	servingCert, err := ioutil.ReadFile(o.ServingCert)
+	if err != nil {
+		return nil, fmt.Errorf("error reading %s: %v", o.ServingCert, err)
+	}
+	servingCertKey, err := ioutil.ReadFile(o.ServingCertKey)
+	if err != nil {
+		return nil, fmt.Errorf("error reading %s: %v", o.ServingCertKey, err)
+	}
+
 	generator := cluster.Generator{
-		Name:          o.Name,
-		Namespace:     o.Namespace,
-		PullSecret:    pullSecret,
-		SSHPrivateKey: sshPrivateKey,
-		InstallOnce:   o.InstallOnce,
-		BaseDomain:    o.BaseDomain,
-		ManageDNS:     o.ManageDNS,
-		DeleteAfter:   o.DeleteAfter,
+		Name:           o.Name,
+		Namespace:      o.Namespace,
+		PullSecret:     pullSecret,
+		SSHPrivateKey:  sshPrivateKey,
+		InstallOnce:    o.InstallOnce,
+		BaseDomain:     o.BaseDomain,
+		ManageDNS:      o.ManageDNS,
+		DeleteAfter:    o.DeleteAfter,
+		ServingCert:    string(servingCert),
+		ServingCertKey: string(servingCertKey),
 	}
 
 	// NOTE: Secrets added to result slice below.
@@ -391,6 +406,11 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	}
 
 	sshPrivateKeySecret, err := generator.GenerateSSHPrivateKeySecret()
+	if err != nil {
+		return nil, err
+	}
+
+	servingCertSecret, err := generator.GenerateServingCertSecret()
 	if err != nil {
 		return nil, err
 	}
@@ -517,10 +537,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 			result = append(result, sshPrivateKeySecret)
 		}
 
-		servingCertSecret, err := o.generateServingCertSecret()
-		if err != nil {
-			return nil, err
-		}
 		if servingCertSecret != nil {
 			result = append(result, servingCertSecret)
 		}
@@ -656,35 +672,6 @@ func (o *Options) getSSHPrivateKey() (string, error) {
 	}
 	log.Debug("No private SSH key file provided")
 	return "", nil
-}
-
-func (o *Options) generateServingCertSecret() (*corev1.Secret, error) {
-	if len(o.ServingCert) == 0 {
-		return nil, nil
-	}
-	servingCert, err := ioutil.ReadFile(o.ServingCert)
-	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %v", o.ServingCert, err)
-	}
-	servingCertKey, err := ioutil.ReadFile(o.ServingCertKey)
-	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %v", o.ServingCertKey, err)
-	}
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-serving-cert", o.Name),
-			Namespace: o.Namespace,
-		},
-		Type: corev1.SecretTypeTLS,
-		StringData: map[string]string{
-			"tls.crt": string(servingCert),
-			"tls.key": string(servingCertKey),
-		},
-	}, nil
 }
 
 func (o *Options) generateManifestsConfigMap() (*corev1.ConfigMap, error) {

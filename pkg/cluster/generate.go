@@ -42,6 +42,12 @@ type Generator struct {
 	// DeleteAfter is the duration after which the cluster should be automatically destroyed, relative to
 	// creationTimestamp. Stored as an annotation on the ClusterDeployment.
 	DeleteAfter string
+
+	// ServingCert is the contents of a serving certificate to be used for the cluster.
+	ServingCert string
+
+	// ServingCertKey is the contents of a key for the ServingCert.
+	ServingCertKey string
 }
 
 // GenerateClusterDeployment generates a new cluster deployment
@@ -143,6 +149,24 @@ func (o *Generator) GenerateSSHPrivateKeySecret() (*corev1.Secret, error) {
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
 			"ssh-privatekey": o.SSHPrivateKey,
+		},
+	}, nil
+}
+
+func (o *Generator) GenerateServingCertSecret() (*corev1.Secret, error) {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-serving-cert", o.Name),
+			Namespace: o.Namespace,
+		},
+		Type: corev1.SecretTypeTLS,
+		StringData: map[string]string{
+			"tls.crt": string(o.ServingCert),
+			"tls.key": string(o.ServingCertKey),
 		},
 	}, nil
 }
