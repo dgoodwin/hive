@@ -283,6 +283,7 @@ func (o *Options) Run() error {
 	if err != nil {
 		return err
 	}
+	log.Infof("got %d objects", len(objs))
 	if len(o.Output) > 0 {
 		var printer printers.ResourcePrinter
 		if o.Output == "yaml" {
@@ -352,10 +353,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	sshPublicKey, err := o.getSSHPublicKey()
 	if err != nil {
 		return nil, err
-	}
-
-	if len(o.ServingCert) == 0 {
-		return nil, nil
 	}
 
 	servingCert, err := ioutil.ReadFile(o.ServingCert)

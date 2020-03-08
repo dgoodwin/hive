@@ -113,27 +113,22 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	allObjects = append(allObjects, installConfigSecret)
 
 	// TODO: maintain "include secrets" flag functionality? possible this should just be removed
-	pullSecretSecret := o.GeneratePullSecretSecret()
-	if pullSecretSecret != nil {
-		allObjects = append(allObjects, pullSecretSecret)
+	if len(o.PullSecret) != 0 {
+		allObjects = append(allObjects, o.GeneratePullSecretSecret())
 	}
-	sshPrivateKeySecret := o.GenerateSSHPrivateKeySecret()
-	if sshPrivateKeySecret != nil {
-		allObjects = append(allObjects, sshPrivateKeySecret)
+	if o.SSHPrivateKey != "" {
+		allObjects = append(allObjects, o.GenerateSSHPrivateKeySecret())
 	}
-	servingCertSecret := o.GenerateServingCertSecret()
-	if servingCertSecret != nil {
-		allObjects = append(allObjects, servingCertSecret)
+	if o.ServingCertKey != "" && o.ServingCert != "" {
+		allObjects = append(allObjects, o.GenerateServingCertSecret())
 	}
 	cloudCredsSecret := o.CloudProvider.GenerateCredentialsSecret(o)
 	if cloudCredsSecret != nil {
 		allObjects = append(allObjects, cloudCredsSecret)
 	}
 
-	// TODO: stop checking nil's at both levels of this
-	manifestsConfigMap := o.GenerateInstallerManifestsConfigMap()
-	if manifestsConfigMap != nil {
-		allObjects = append(allObjects, manifestsConfigMap)
+	if o.InstallerManifests != nil {
+		allObjects = append(allObjects, o.GenerateInstallerManifestsConfigMap())
 	}
 
 	if o.Adopt {
@@ -323,9 +318,6 @@ func (o *Generator) getInstallConfigSecretName() string {
 // GeneratePullSecretSecret returns a Kubernetes Secret containing the pull secret to be
 // used for pulling images.
 func (o *Generator) GeneratePullSecretSecret() *corev1.Secret {
-	if len(o.PullSecret) == 0 {
-		return nil
-	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -345,9 +337,6 @@ func (o *Generator) GeneratePullSecretSecret() *corev1.Secret {
 // GenerateSSHPrivateKeySecret returns a Kubernetes Secret containing the SSH private
 // key to be used.
 func (o *Generator) GenerateSSHPrivateKeySecret() *corev1.Secret {
-	if o.SSHPrivateKey == "" {
-		return nil
-	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -396,9 +385,6 @@ func (o *Generator) GenerateAdminKubeconfigSecret() *corev1.Secret {
 }
 
 func (o *Generator) GenerateInstallerManifestsConfigMap() *corev1.ConfigMap {
-	if o.InstallerManifests == nil {
-		return nil
-	}
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
