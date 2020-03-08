@@ -370,6 +370,12 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, fmt.Errorf("error reading %s: %v", o.ServingCertKey, err)
 	}
 
+	// Load installer manifest files:
+	manifestFileData, err := o.getManifestFileBytes()
+	if err != nil {
+		return nil, err
+	}
+
 	generator := cluster.Generator{
 		Name:             o.Name,
 		Namespace:        o.Namespace,
@@ -386,6 +392,7 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		Labels: map[string]string{
 			hiveutilCreatedLabel: "true",
 		},
+		InstallerManifests: manifestFileData,
 	}
 	if o.Adopt {
 		kubeconfigBytes, err := ioutil.ReadFile(o.AdoptAdminKubeConfig)
@@ -457,16 +464,12 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		generator.CloudProvider = gcpProvider
 	}
 
-	manifestsConfigMap, err := o.generateManifestsConfigMap()
+	result, err := generator.GenerateAll()
 	if err != nil {
-		return nil, err
+		return result, err
 	}
-	if manifestsConfigMap != nil {
-		cd.Spec.Provisioning.ManifestsConfigMapRef = &corev1.LocalObjectReference{
-			Name: manifestsConfigMap.Name,
-		}
-		result = append(result, manifestsConfigMap)
-	}
+
+	// Add some additional objects we don't yet want to move to the cluster generator library.
 
 	imageSet, err := o.configureImages(cd)
 	if err != nil {
@@ -488,11 +491,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 			result = append(result, creds)
 		}
 
-	}
-
-	result, err := generator.GenerateAll()
-	if err != nil {
-		return result, err
 	}
 
 	if o.CreateSampleSyncsets {
@@ -564,26 +562,16 @@ func (o *Options) getSSHPrivateKey() (string, error) {
 	return "", nil
 }
 
-func (o *Options) generateManifestsConfigMap() (*corev1.ConfigMap, error) {
+func (o *Options) getManifestFileBytes() (map[string][]byte, error) {
 	if o.ManifestsDir == "" && !o.SimulateBootstrapFailure {
 		return nil, nil
 	}
-	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: corev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-manifests", o.Name),
-			Namespace: o.Namespace,
-		},
-	}
+	fileData := map[string][]byte{}
 	if o.ManifestsDir != "" {
 		files, err := ioutil.ReadDir(o.ManifestsDir)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read manifests directory")
 		}
-		cm.BinaryData = make(map[string][]byte, len(files))
 		for _, file := range files {
 			if file.IsDir() {
 				continue
@@ -592,15 +580,13 @@ func (o *Options) generateManifestsConfigMap() (*corev1.ConfigMap, error) {
 			if err != nil {
 				return nil, errors.Wrapf(err, "could not read manifest file %q", file.Name())
 			}
-			cm.BinaryData[file.Name()] = data
+			fileData[file.Name()] = data
 		}
 	}
 	if o.SimulateBootstrapFailure {
-		cm.Data = map[string]string{
-			"failure-test.yaml": testFailureManifest,
-		}
+		fileData["failure-test.yaml"] = []byte(testFailureManifest)
 	}
-	return cm, nil
+	return fileData, nil
 }
 
 func (o *Options) configureImages(cd *hivev1.ClusterDeployment) (*hivev1.ClusterImageSet, error) {

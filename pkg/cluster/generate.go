@@ -30,6 +30,9 @@ type Generator struct {
 	// Labels are labels to be added to the ClusterDeployment.
 	Labels map[string]string
 
+	// CloudProvider encapsulates logic for building the objects for a specific cloud.
+	CloudProvider CloudProvider
+
 	// PullSecret is the secret to use when pulling images.
 	PullSecret string
 
@@ -68,13 +71,15 @@ type Generator struct {
 	Adopt bool
 
 	// AdoptAdminKubeconfig is a cluster administrator admin kubeconfig typically obtained
-	// from openshift-install. Should be set when adopting pre-existing clusters.
+	// from openshift-install. Required when adopting pre-existing clusters.
 	AdoptAdminKubeconfig []byte
 
 	// AdoptClusterID is the unique generated ID for a cluster being adopted.
+	// Required when adopting pre-existing clusters.
 	AdoptClusterID string
 
 	// AdoptInfraID is the unique generated infrastructure ID for a cluster being adopted.
+	// Required when adopting pre-existing clusters.
 	AdoptInfraID string
 
 	// AdoptAdminUsername is the admin username for an adopted cluster, typically written to disk
@@ -85,8 +90,9 @@ type Generator struct {
 	// after openshift-install create-cluster. This field is optional when adopting.
 	AdoptAdminPassword string
 
-	// CloudProvider encapsulates logic for building the objects for a specific cloud.
-	CloudProvider CloudProvider
+	// InstallerManifests is a map of filename strings to bytes for files to inject into the installers
+	// manifests dir before launching create-cluster.
+	InstallerManifests map[string][]byte
 }
 
 func (o *Generator) GenerateAll() ([]runtime.Object, error) {
@@ -111,6 +117,12 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	servingCertSecret := o.GenerateServingCertSecret()
 	if servingCertSecret != nil {
 		allObjects = append(allObjects, servingCertSecret)
+	}
+
+	// TODO: stop checking nil's at both levels of this
+	manifestsConfigMap := o.GenerateInstallerManifestsConfigMap()
+	if manifestsConfigMap != nil {
+		allObjects = append(allObjects, manifestsConfigMap)
 	}
 
 	if o.Adopt {
@@ -189,6 +201,12 @@ func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 			cd.Spec.ClusterMetadata.AdminPasswordSecretRef = corev1.LocalObjectReference{
 				Name: o.getAdoptAdminPasswordSecretName(),
 			}
+		}
+	}
+
+	if o.InstallerManifests != nil {
+		cd.Spec.Provisioning.ManifestsConfigMapRef = &corev1.LocalObjectReference{
+			Name: o.getManifestsConfigMapName(),
 		}
 	}
 
@@ -359,6 +377,23 @@ func (o *Generator) GenerateAdminKubeconfigSecret() *corev1.Secret {
 	}
 }
 
+func (o *Generator) GenerateInstallerManifestsConfigMap() *corev1.ConfigMap {
+	if o.InstallerManifests == nil {
+		return nil
+	}
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      o.getManifestsConfigMapName(),
+			Namespace: o.Namespace,
+		},
+		BinaryData: o.InstallerManifests,
+	}
+}
+
 func (o *Generator) GenerateAdoptedAdminPasswordSecret() *corev1.Secret {
 	if o.AdoptAdminUsername == "" {
 		return nil
@@ -376,6 +411,9 @@ func (o *Generator) GenerateAdoptedAdminPasswordSecret() *corev1.Secret {
 	return adminPasswordSecret
 }
 
+func (o *Generator) getManifestsConfigMapName() string {
+	return fmt.Sprintf("%s-manifests", o.Name)
+}
 func (o *Generator) getAdoptAdminPasswordSecretName() string {
 	return fmt.Sprintf("%s-adopted-admin-password", o.Name)
 }
