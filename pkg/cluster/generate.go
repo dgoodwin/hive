@@ -93,6 +93,13 @@ type Generator struct {
 	// InstallerManifests is a map of filename strings to bytes for files to inject into the installers
 	// manifests dir before launching create-cluster.
 	InstallerManifests map[string][]byte
+
+	// ImageSet is the ClusterImageSet to use for this cluster.
+	ImageSet string
+
+	// ReleaseImage is a specific OpenShift release image to install this cluster with. Will override
+	// ImageSet.
+	ReleaseImage string
 }
 
 func (o *Generator) GenerateAll() ([]runtime.Object, error) {
@@ -105,7 +112,7 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	}
 	allObjects = append(allObjects, installConfigSecret)
 
-	// TODO: maintain "include secrets" flag functionality?
+	// TODO: maintain "include secrets" flag functionality? possible this should just be removed
 	pullSecretSecret := o.GeneratePullSecretSecret()
 	if pullSecretSecret != nil {
 		allObjects = append(allObjects, pullSecretSecret)
@@ -117,6 +124,10 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	servingCertSecret := o.GenerateServingCertSecret()
 	if servingCertSecret != nil {
 		allObjects = append(allObjects, servingCertSecret)
+	}
+	cloudCredsSecret := o.CloudProvider.GenerateCredentialsSecret(o)
+	if cloudCredsSecret != nil {
+		allObjects = append(allObjects, cloudCredsSecret)
 	}
 
 	// TODO: stop checking nil's at both levels of this
@@ -131,6 +142,7 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 			allObjects = append(allObjects, o.GenerateAdoptedAdminPasswordSecret())
 		}
 	}
+
 	return allObjects, nil
 }
 
@@ -208,6 +220,12 @@ func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 		cd.Spec.Provisioning.ManifestsConfigMapRef = &corev1.LocalObjectReference{
 			Name: o.getManifestsConfigMapName(),
 		}
+	}
+
+	if o.ReleaseImage != "" {
+		cd.Spec.Provisioning.ReleaseImage = o.ReleaseImage
+	} else if o.ImageSet != "" {
+		cd.Spec.Provisioning.ImageSetRef = &hivev1.ClusterImageSetReference{Name: o.ImageSet}
 	}
 
 	cd.Spec.Provisioning.InstallConfigSecretRef = corev1.LocalObjectReference{Name: o.getInstallConfigSecretName()}

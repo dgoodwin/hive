@@ -34,6 +34,7 @@
 // config/crds/hive_v1_clusterdeployment.yaml
 // config/crds/hive_v1_clusterdeprovision.yaml
 // config/crds/hive_v1_clusterimageset.yaml
+// config/crds/hive_v1_clusterpool.yaml
 // config/crds/hive_v1_clusterprovision.yaml
 // config/crds/hive_v1_clusterstate.yaml
 // config/crds/hive_v1_dnszone.yaml
@@ -2552,6 +2553,148 @@ func configCrdsHive_v1_clusterimagesetYaml() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "config/crds/hive_v1_clusterimageset.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _configCrdsHive_v1_clusterpoolYaml = []byte(`apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: clusterpools.hive.openshift.io
+spec:
+  group: hive.openshift.io
+  names:
+    kind: ClusterPool
+    plural: clusterpools
+    shortNames:
+    - cp
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            baseDomain:
+              description: BaseDomain is the base domain to use for all clusters created
+                in this pool.
+              type: string
+            deleteAfter:
+              description: DeleteAfter is a duration of time after the ClusterDeployment's
+                creationTimestamp when we should delete the cluster. Stored as an
+                annotation on the ClusterDeployment and maybe adjusted and thus overridden
+                by users who are granted access to the cluster.
+              type: string
+            platform:
+              description: Platform encompasses the desired platform for the cluster.
+              properties:
+                aws:
+                  description: AWS is the configuration used when installing on AWS.
+                  properties:
+                    credentialsSecretRef:
+                      description: CredentialsSecretRef refers to a secret that contains
+                        the AWS account access credentials.
+                      type: object
+                    region:
+                      description: Region specifies the AWS region where the cluster
+                        will be created.
+                      type: string
+                    userTags:
+                      description: UserTags specifies additional tags for AWS resources
+                        created for the cluster.
+                      type: object
+                  type: object
+                azure:
+                  description: Azure is the configuration used when installing on
+                    Azure.
+                  properties:
+                    baseDomainResourceGroupName:
+                      description: BaseDomainResourceGroupName specifies the resource
+                        group where the azure DNS zone for the base domain is found
+                      type: string
+                    credentialsSecretRef:
+                      description: CredentialsSecretRef refers to a secret that contains
+                        the Azure account access credentials.
+                      type: object
+                    region:
+                      description: Region specifies the Azure region where the cluster
+                        will be created.
+                      type: string
+                  type: object
+                bareMetal:
+                  description: BareMetal is the configuration used when installing
+                    on bare metal.
+                  properties:
+                    libvirtSSHPrivateKeySecretRef:
+                      description: LibvirtSSHPrivateKeySecretRef is the reference
+                        to the secret that contains the private SSH key to use for
+                        access to the libvirt provisioning host. The SSH private key
+                        is expected to be in the secret data under the "ssh-privatekey"
+                        key.
+                      type: object
+                  type: object
+                gcp:
+                  description: GCP is the configuration used when installing on Google
+                    Cloud Platform.
+                  properties:
+                    credentialsSecretRef:
+                      description: CredentialsSecretRef refers to a secret that contains
+                        the GCP account access credentials.
+                      type: object
+                    region:
+                      description: Region specifies the GCP region where the cluster
+                        will be created.
+                      type: string
+                  type: object
+              type: object
+            size:
+              description: Size is the default number of clusters that we should keep
+                provisioned and waiting for use.
+              format: int64
+              type: integer
+          required:
+          - platform
+          - size
+          - baseDomain
+          type: object
+        status:
+          type: object
+  version: v1
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+`)
+
+func configCrdsHive_v1_clusterpoolYamlBytes() ([]byte, error) {
+	return _configCrdsHive_v1_clusterpoolYaml, nil
+}
+
+func configCrdsHive_v1_clusterpoolYaml() (*asset, error) {
+	bytes, err := configCrdsHive_v1_clusterpoolYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/crds/hive_v1_clusterpool.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5323,6 +5466,7 @@ var _bindata = map[string]func() (*asset, error){
 	"config/crds/hive_v1_clusterdeployment.yaml":                configCrdsHive_v1_clusterdeploymentYaml,
 	"config/crds/hive_v1_clusterdeprovision.yaml":               configCrdsHive_v1_clusterdeprovisionYaml,
 	"config/crds/hive_v1_clusterimageset.yaml":                  configCrdsHive_v1_clusterimagesetYaml,
+	"config/crds/hive_v1_clusterpool.yaml":                      configCrdsHive_v1_clusterpoolYaml,
 	"config/crds/hive_v1_clusterprovision.yaml":                 configCrdsHive_v1_clusterprovisionYaml,
 	"config/crds/hive_v1_clusterstate.yaml":                     configCrdsHive_v1_clusterstateYaml,
 	"config/crds/hive_v1_dnszone.yaml":                          configCrdsHive_v1_dnszoneYaml,
@@ -5395,6 +5539,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"hive_v1_clusterdeployment.yaml":            {configCrdsHive_v1_clusterdeploymentYaml, map[string]*bintree{}},
 			"hive_v1_clusterdeprovision.yaml":           {configCrdsHive_v1_clusterdeprovisionYaml, map[string]*bintree{}},
 			"hive_v1_clusterimageset.yaml":              {configCrdsHive_v1_clusterimagesetYaml, map[string]*bintree{}},
+			"hive_v1_clusterpool.yaml":                  {configCrdsHive_v1_clusterpoolYaml, map[string]*bintree{}},
 			"hive_v1_clusterprovision.yaml":             {configCrdsHive_v1_clusterprovisionYaml, map[string]*bintree{}},
 			"hive_v1_clusterstate.yaml":                 {configCrdsHive_v1_clusterstateYaml, map[string]*bintree{}},
 			"hive_v1_dnszone.yaml":                      {configCrdsHive_v1_dnszoneYaml, map[string]*bintree{}},

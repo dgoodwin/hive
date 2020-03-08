@@ -25,10 +25,7 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-
-	installertypes "github.com/openshift/installer/pkg/types"
 
 	"github.com/openshift/hive/pkg/apis"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
@@ -376,7 +373,7 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, err
 	}
 
-	generator := cluster.Generator{
+	generator := &cluster.Generator{
 		Name:             o.Name,
 		Namespace:        o.Namespace,
 		WorkerNodesCount: o.WorkerNodes,
@@ -464,33 +461,19 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		generator.CloudProvider = gcpProvider
 	}
 
+	imageSet, err := o.configureImages(generator)
+	if err != nil {
+		return nil, err
+	}
+
 	result, err := generator.GenerateAll()
 	if err != nil {
 		return result, err
 	}
 
 	// Add some additional objects we don't yet want to move to the cluster generator library.
-
-	imageSet, err := o.configureImages(cd)
-	if err != nil {
-		return nil, err
-	}
 	if imageSet != nil {
 		result = append(result, imageSet)
-	}
-
-	if o.IncludeSecrets {
-		// TODO: skip secrets?
-
-		// If the user provided a pre-existing creds secret we can skip this step.
-		if o.CredsSecret == "" {
-			creds, err := o.cloudProvider.generateCredentialsSecret(o)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, creds)
-		}
-
 	}
 
 	if o.CreateSampleSyncsets {
@@ -498,12 +481,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 	}
 
 	return result, nil
-}
-
-func (o *Options) addAdoptionInfo(cd *hivev1.ClusterDeployment) ([]runtime.Object, error) {
-}
-
-func (o *Options) generateInstallConfigSecret(ic *installertypes.InstallConfig) (*corev1.Secret, error) {
 }
 
 func (o *Options) getPullSecret() (string, error) {
@@ -589,13 +566,12 @@ func (o *Options) getManifestFileBytes() (map[string][]byte, error) {
 	return fileData, nil
 }
 
-func (o *Options) configureImages(cd *hivev1.ClusterDeployment) (*hivev1.ClusterImageSet, error) {
+func (o *Options) configureImages(generator *cluster.Generator) (*hivev1.ClusterImageSet, error) {
 	if len(o.ClusterImageSet) > 0 {
-		cd.Spec.Provisioning.ImageSetRef = &hivev1.ClusterImageSetReference{
-			Name: o.ClusterImageSet,
-		}
+		generator.ImageSet = o.ClusterImageSet
 		return nil, nil
 	}
+	// TODO: move release image lookup code to the cluster library
 	if o.ReleaseImage == "" {
 		if o.ReleaseImageSource == "" {
 			return nil, fmt.Errorf("Specify either a release image or a release image source")
@@ -607,7 +583,7 @@ func (o *Options) configureImages(cd *hivev1.ClusterDeployment) (*hivev1.Cluster
 		}
 	}
 	if !o.UseClusterImageSet {
-		cd.Spec.Provisioning.ReleaseImage = o.ReleaseImage
+		o.ReleaseImage = o.ReleaseImage
 		return nil, nil
 	}
 
@@ -623,10 +599,6 @@ func (o *Options) configureImages(cd *hivev1.ClusterDeployment) (*hivev1.Cluster
 			ReleaseImage: o.ReleaseImage,
 		},
 	}
-	cd.Spec.Provisioning.ImageSetRef = &hivev1.ClusterImageSetReference{
-		Name: imageSet.Name,
-	}
-
 	return imageSet, nil
 }
 
