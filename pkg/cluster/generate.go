@@ -76,6 +76,9 @@ type Generator struct {
 
 	// AdoptInfraID is the unique generated infrastructure ID for a cluster being adopted.
 	AdoptInfraID string
+
+	// CloudProvider encapsulates logic for building the objects for a specific cloud.
+	CloudProvider CloudProvider
 }
 
 func (o *Generator) GenerateAll() ([]runtime.Object, error) {
@@ -173,6 +176,7 @@ func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 	}
 
 	cd.Spec.Provisioning.InstallConfigSecretRef = corev1.LocalObjectReference{Name: o.getInstallConfigSecretName()}
+	o.CloudProvider.AddClusterDeploymentPlatform(o, cd)
 
 	return cd
 }
@@ -215,6 +219,8 @@ func (o *Generator) GenerateInstallConfigSecret() (*corev1.Secret, error) {
 		},
 	}
 
+	o.CloudProvider.AddInstallConfigPlatform(o, installConfig)
+
 	d, err := yaml.Marshal(installConfig)
 	if err != nil {
 		return nil, err
@@ -233,6 +239,27 @@ func (o *Generator) GenerateInstallConfigSecret() (*corev1.Secret, error) {
 			"install-config.yaml": d,
 		},
 	}, nil
+}
+
+func (o *Generator) GenerateMachinePool() *hivev1.MachinePool {
+	return &hivev1.MachinePool{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MachinePool",
+			APIVersion: hivev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-worker", o.Name),
+			Namespace: o.Namespace,
+		},
+		Spec: hivev1.MachinePoolSpec{
+			ClusterDeploymentRef: corev1.LocalObjectReference{
+				Name: o.Name,
+			},
+			Name:     "worker",
+			Replicas: pointer.Int64Ptr(o.WorkerNodesCount),
+		},
+	}
+
 }
 
 func (o *Generator) getInstallConfigSecretName() string {
@@ -330,4 +357,11 @@ func (o *Generator) getSSHPrivateKeySecretName() string {
 // TODO: handle long cluster names.
 func (o *Generator) getPullSecretSecretName() string {
 	return fmt.Sprintf("%s-pull-secret", o.Name)
+}
+
+type CloudProvider interface {
+	AddClusterDeploymentPlatform(o *Generator, cd *hivev1.ClusterDeployment)
+	AddMachinePoolPlatform(o *Generator, mp *hivev1.MachinePool)
+	AddInstallConfigPlatform(o *Generator, ic *installertypes.InstallConfig)
+	GenerateCredentialsSecret(o *Generator) *corev1.Secret
 }

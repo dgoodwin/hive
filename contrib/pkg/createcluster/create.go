@@ -3,7 +3,10 @@ package createcluster
 import (
 	"encoding/json"
 	"fmt"
+	awsutils "github.com/openshift/hive/contrib/pkg/utils/aws"
+	gcputils "github.com/openshift/hive/contrib/pkg/utils/gcp"
 	"github.com/openshift/hive/pkg/cluster"
+	"github.com/openshift/hive/pkg/gcpclient"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -86,6 +89,7 @@ metadata:
   namespace: bar
 type: TestFailResource
 `
+	azureCredFile = "osServicePrincipal.json"
 )
 
 var (
@@ -135,8 +139,7 @@ type Options struct {
 	// Azure
 	AzureBaseDomainResourceGroupName string
 
-	homeDir       string
-	cloudProvider cloudProvider
+	homeDir string
 }
 
 // NewCreateClusterCommand creates a command that generates and applies cluster deployment artifacts.
@@ -273,30 +276,10 @@ func (o *Options) Validate(cmd *cobra.Command) error {
 	return nil
 }
 
-type cloudProvider interface {
-	generateCredentialsSecret(o *Options) (*corev1.Secret, error)
-
-	addPlatformDetails(
-		o *Options,
-		cd *hivev1.ClusterDeployment,
-		machinePool *hivev1.MachinePool,
-		installConfig *installertypes.InstallConfig,
-	) error
-}
-
 // Run executes the command
 func (o *Options) Run() error {
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		return err
-	}
-
-	switch o.Cloud {
-	case cloudAWS:
-		o.cloudProvider = &awsCloudProvider{}
-	case cloudAzure:
-		o.cloudProvider = &azureCloudProvider{}
-	case cloudGCP:
-		o.cloudProvider = &gcpCloudProvider{}
 	}
 
 	objs, err := o.GenerateObjects()
@@ -434,26 +417,61 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return objectsToCreate, nil
 	}
 
-	computePool := &hivev1.MachinePool{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MachinePool",
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-worker", o.Name),
-			Namespace: o.Namespace,
-		},
-		Spec: hivev1.MachinePoolSpec{
-			ClusterDeploymentRef: corev1.LocalObjectReference{
-				Name: o.Name,
-			},
-			Name:     "worker",
-			Replicas: pointer.Int64Ptr(o.WorkerNodes),
-		},
-	}
+	switch o.Cloud {
+	case cloudAWS:
+		defaultCredsFilePath := filepath.Join(o.homeDir, ".aws", "credentials")
+		accessKeyID, secretAccessKey, err := awsutils.GetAWSCreds(o.CredsFile, defaultCredsFilePath)
+		if err != nil {
+			return nil, err
+		}
+		awsProvider := &cluster.AWSCloudProvider{
+			AccessKeyID:     accessKeyID,
+			SecretAccessKey: secretAccessKey,
+		}
+		if o.CredsSecret != "" {
+			awsProvider.ReuseCredsSecret = &corev1.LocalObjectReference{Name: o.CredsSecret}
+		}
+		generator.CloudProvider = awsProvider
+	case cloudAzure:
+		credsFilePath := filepath.Join(os.Getenv("HOME"), ".azure", azureCredFile)
+		if l := os.Getenv("AZURE_AUTH_LOCATION"); l != "" {
+			credsFilePath = l
+		}
+		if o.CredsFile != "" {
+			credsFilePath = o.CredsFile
+		}
+		log.Infof("Loading Azure service principal from: %s", credsFilePath)
+		spFileContents, err := ioutil.ReadFile(credsFilePath)
+		if err != nil {
+			return nil, err
+		}
 
-	if err := o.cloudProvider.addPlatformDetails(o, cd, computePool, installConfig); err != nil {
-		return nil, err
+		azureProvider := &cluster.AzureCloudProvider{
+			ServicePrincipal:            spFileContents,
+			BaseDomainResourceGroupName: o.AzureBaseDomainResourceGroupName,
+		}
+		if o.CredsSecret != "" {
+			azureProvider.ReuseCredsSecret = &corev1.LocalObjectReference{Name: o.CredsSecret}
+		}
+		generator.CloudProvider = azureProvider
+	case cloudGCP:
+		creds, err := gcputils.GetCreds(o.CredsFile)
+		if err != nil {
+			return nil, err
+		}
+		projectID, err := gcpclient.ProjectID(creds)
+		if err != nil {
+			return nil, err
+		}
+
+		gcpProvider := &cluster.GCPCloudProvider{
+			ProjectID:      projectID,
+			ServiceAccount: creds,
+		}
+		if o.CredsSecret != "" {
+			gcpProvider.ReuseCredsSecret = &corev1.LocalObjectReference{Name: o.CredsSecret}
+		}
+		generator.CloudProvider = gcpProvider
 	}
 
 	manifestsConfigMap, err := o.generateManifestsConfigMap()

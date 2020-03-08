@@ -1,13 +1,10 @@
-package createcluster
+package cluster
 
 import (
 	"fmt"
-	"path/filepath"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	awsutils "github.com/openshift/hive/contrib/pkg/utils/aws"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	hivev1aws "github.com/openshift/hive/pkg/apis/hive/v1/aws"
 
@@ -23,17 +20,22 @@ const (
 	volumeType      = "gp2"
 )
 
-var _ cloudProvider = (*awsCloudProvider)(nil)
+var _ CloudProvider = (*AWSCloudProvider)(nil)
 
-type awsCloudProvider struct {
+type AWSCloudProvider struct {
+	// AccessKeyID is the AWS access key ID.
+	AccessKeyID string
+	// SecretAccessKey is the AWS secret access key.
+	SecretAccessKey string
+
+	ReuseCredsSecret *corev1.LocalObjectReference
 }
 
-func (p *awsCloudProvider) generateCredentialsSecret(o *Options) (*corev1.Secret, error) {
-	defaultCredsFilePath := filepath.Join(o.homeDir, ".aws", "credentials")
-	accessKeyID, secretAccessKey, err := awsutils.GetAWSCreds(o.CredsFile, defaultCredsFilePath)
-	if err != nil {
-		return nil, err
+func (p *AWSCloudProvider) GenerateCredentialsSecret(o *Generator) *corev1.Secret {
+	if p.ReuseCredsSecret != nil {
+		return nil
 	}
+
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -45,20 +47,13 @@ func (p *awsCloudProvider) generateCredentialsSecret(o *Options) (*corev1.Secret
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
-			"aws_access_key_id":     accessKeyID,
-			"aws_secret_access_key": secretAccessKey,
+			"aws_access_key_id":     p.AccessKeyID,
+			"aws_secret_access_key": p.SecretAccessKey,
 		},
-	}, nil
+	}
 }
 
-func (p *awsCloudProvider) addPlatformDetails(
-	o *Options,
-	cd *hivev1.ClusterDeployment,
-	machinePool *hivev1.MachinePool,
-	installConfig *installertypes.InstallConfig,
-) error {
-
-	// Inject platform details into ClusterDeployment:
+func (p *AWSCloudProvider) AddClusterDeploymentPlatform(o *Generator, cd *hivev1.ClusterDeployment) {
 	cd.Spec.Platform = hivev1.Platform{
 		AWS: &hivev1aws.Platform{
 			CredentialsSecretRef: corev1.LocalObjectReference{
@@ -67,8 +62,10 @@ func (p *awsCloudProvider) addPlatformDetails(
 			Region: awsRegion,
 		},
 	}
+}
 
-	machinePool.Spec.Platform.AWS = &hivev1aws.MachinePoolPlatform{
+func (p *AWSCloudProvider) AddMachinePoolPlatform(o *Generator, mp *hivev1.MachinePool) {
+	mp.Spec.Platform.AWS = &hivev1aws.MachinePoolPlatform{
 		InstanceType: awsInstanceType,
 		EC2RootVolume: hivev1aws.EC2RootVolume{
 			IOPS: volumeIOPS,
@@ -77,8 +74,11 @@ func (p *awsCloudProvider) addPlatformDetails(
 		},
 	}
 
+}
+
+func (p *AWSCloudProvider) AddInstallConfigPlatform(o *Generator, ic *installertypes.InstallConfig) {
 	// Inject platform details into InstallConfig:
-	installConfig.Platform = installertypes.Platform{
+	ic.Platform = installertypes.Platform{
 		AWS: &awsinstallertypes.Platform{
 			Region: awsRegion,
 		},
@@ -93,15 +93,11 @@ func (p *awsCloudProvider) addPlatformDetails(
 			Type: volumeType,
 		},
 	}
-	installConfig.ControlPlane.Platform.AWS = mpp
-	installConfig.Compute[0].Platform.AWS = mpp
+	ic.ControlPlane.Platform.AWS = mpp
+	ic.Compute[0].Platform.AWS = mpp
 
-	return nil
 }
 
-func (p *awsCloudProvider) credsSecretName(o *Options) string {
-	if o.CredsSecret != "" {
-		return o.CredsSecret
-	}
+func (p *AWSCloudProvider) credsSecretName(o *Generator) string {
 	return fmt.Sprintf("%s-aws-creds", o.Name)
 }
