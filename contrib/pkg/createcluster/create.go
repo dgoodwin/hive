@@ -396,25 +396,8 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		generator.AdoptInfraID = o.AdoptInfraID
 		generator.AdoptClusterID = o.AdoptClusterID
 		generator.AdoptAdminKubeconfig = kubeconfigBytes
-
-		if o.AdoptAdminUsername != "" {
-			adminPasswordSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s-adopted-admin-password", cd.Name),
-					Namespace: cd.Namespace,
-				},
-				StringData: map[string]string{
-					"username": o.AdoptAdminUsername,
-					"password": o.AdoptAdminPassword,
-				},
-			}
-			objectsToCreate = append(objectsToCreate, adminPasswordSecret)
-			cd.Spec.ClusterMetadata.AdminPasswordSecretRef = corev1.LocalObjectReference{
-				Name: adminPasswordSecret.Name,
-			}
-		}
-
-		return objectsToCreate, nil
+		generator.AdoptAdminUsername = o.AdoptAdminUsername
+		generator.AdoptAdminPassword = o.AdoptAdminPassword
 	}
 
 	switch o.Cloud {
@@ -506,8 +489,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		}
 
 	}
-
-	result = append(result, installConfigSecret, cd, computePool)
 
 	result, err := generator.GenerateAll()
 	if err != nil {

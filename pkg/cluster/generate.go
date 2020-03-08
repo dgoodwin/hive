@@ -77,6 +77,14 @@ type Generator struct {
 	// AdoptInfraID is the unique generated infrastructure ID for a cluster being adopted.
 	AdoptInfraID string
 
+	// AdoptAdminUsername is the admin username for an adopted cluster, typically written to disk
+	// after openshift-install create-cluster. This field is optional when adopting.
+	AdoptAdminUsername string
+
+	// AdoptAdminUsername is the admin password for an adopted cluster, typically written to disk
+	// after openshift-install create-cluster. This field is optional when adopting.
+	AdoptAdminPassword string
+
 	// CloudProvider encapsulates logic for building the objects for a specific cloud.
 	CloudProvider CloudProvider
 }
@@ -84,6 +92,7 @@ type Generator struct {
 func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 	allObjects := []runtime.Object{}
 	allObjects = append(allObjects, o.GenerateClusterDeployment())
+	allObjects = append(allObjects, o.GenerateMachinePool())
 	installConfigSecret, err := o.GenerateInstallConfigSecret()
 	if err != nil {
 		return nil, err
@@ -106,6 +115,9 @@ func (o *Generator) GenerateAll() ([]runtime.Object, error) {
 
 	if o.Adopt {
 		allObjects = append(allObjects, o.GenerateAdminKubeconfigSecret())
+		if o.AdoptAdminUsername != "" {
+			allObjects = append(allObjects, o.GenerateAdoptedAdminPasswordSecret())
+		}
 	}
 	return allObjects, nil
 }
@@ -173,6 +185,11 @@ func (o *Generator) GenerateClusterDeployment() *hivev1.ClusterDeployment {
 			AdminKubeconfigSecretRef: corev1.LocalObjectReference{Name: o.getAdoptAdminKubeconfigSecretName()},
 		}
 		cd.Spec.Installed = true
+		if o.AdoptAdminUsername != "" {
+			cd.Spec.ClusterMetadata.AdminPasswordSecretRef = corev1.LocalObjectReference{
+				Name: o.getAdoptAdminPasswordSecretName(),
+			}
+		}
 	}
 
 	cd.Spec.Provisioning.InstallConfigSecretRef = corev1.LocalObjectReference{Name: o.getInstallConfigSecretName()}
@@ -242,7 +259,7 @@ func (o *Generator) GenerateInstallConfigSecret() (*corev1.Secret, error) {
 }
 
 func (o *Generator) GenerateMachinePool() *hivev1.MachinePool {
-	return &hivev1.MachinePool{
+	mp := &hivev1.MachinePool{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "MachinePool",
 			APIVersion: hivev1.SchemeGroupVersion.String(),
@@ -259,7 +276,8 @@ func (o *Generator) GenerateMachinePool() *hivev1.MachinePool {
 			Replicas: pointer.Int64Ptr(o.WorkerNodesCount),
 		},
 	}
-
+	o.CloudProvider.AddMachinePoolPlatform(o, mp)
+	return mp
 }
 
 func (o *Generator) getInstallConfigSecretName() string {
@@ -339,6 +357,27 @@ func (o *Generator) GenerateAdminKubeconfigSecret() *corev1.Secret {
 			"raw-kubeconfig": o.AdoptAdminKubeconfig,
 		},
 	}
+}
+
+func (o *Generator) GenerateAdoptedAdminPasswordSecret() *corev1.Secret {
+	if o.AdoptAdminUsername == "" {
+		return nil
+	}
+	adminPasswordSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      o.getAdoptAdminPasswordSecretName(),
+			Namespace: o.Namespace,
+		},
+		StringData: map[string]string{
+			"username": o.AdoptAdminUsername,
+			"password": o.AdoptAdminPassword,
+		},
+	}
+	return adminPasswordSecret
+}
+
+func (o *Generator) getAdoptAdminPasswordSecretName() string {
+	return fmt.Sprintf("%s-adopted-admin-password", o.Name)
 }
 
 func (o *Generator) getServingCertSecretName() string {
