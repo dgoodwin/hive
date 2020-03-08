@@ -283,7 +283,6 @@ func (o *Options) Run() error {
 	if err != nil {
 		return err
 	}
-	log.Infof("got %d objects", len(objs))
 	if len(o.Output) > 0 {
 		var printer printers.ResourcePrinter
 		if o.Output == "yaml" {
@@ -355,15 +354,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		return nil, err
 	}
 
-	servingCert, err := ioutil.ReadFile(o.ServingCert)
-	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %v", o.ServingCert, err)
-	}
-	servingCertKey, err := ioutil.ReadFile(o.ServingCertKey)
-	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %v", o.ServingCertKey, err)
-	}
-
 	// Load installer manifest files:
 	manifestFileData, err := o.getManifestFileBytes()
 	if err != nil {
@@ -381,8 +371,6 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 		BaseDomain:       o.BaseDomain,
 		ManageDNS:        o.ManageDNS,
 		DeleteAfter:      o.DeleteAfter,
-		ServingCert:      string(servingCert),
-		ServingCertKey:   string(servingCertKey),
 		Labels: map[string]string{
 			hiveutilCreatedLabel: "true",
 		},
@@ -456,6 +444,19 @@ func (o *Options) GenerateObjects() ([]runtime.Object, error) {
 			gcpProvider.ReuseCredsSecret = &corev1.LocalObjectReference{Name: o.CredsSecret}
 		}
 		generator.CloudProvider = gcpProvider
+	}
+
+	if len(o.ServingCert) != 0 {
+		servingCert, err := ioutil.ReadFile(o.ServingCert)
+		if err != nil {
+			return nil, fmt.Errorf("error reading %s: %v", o.ServingCert, err)
+		}
+		generator.ServingCert = string(servingCert)
+		servingCertKey, err := ioutil.ReadFile(o.ServingCertKey)
+		if err != nil {
+			return nil, fmt.Errorf("error reading %s: %v", o.ServingCertKey, err)
+		}
+		generator.ServingCertKey = string(servingCertKey)
 	}
 
 	imageSet, err := o.configureImages(generator)
@@ -580,7 +581,7 @@ func (o *Options) configureImages(generator *cluster.Generator) (*hivev1.Cluster
 		}
 	}
 	if !o.UseClusterImageSet {
-		o.ReleaseImage = o.ReleaseImage
+		generator.ReleaseImage = o.ReleaseImage
 		return nil, nil
 	}
 
@@ -596,6 +597,7 @@ func (o *Options) configureImages(generator *cluster.Generator) (*hivev1.Cluster
 			ReleaseImage: o.ReleaseImage,
 		},
 	}
+	generator.ImageSet = imageSet.Name
 	return imageSet, nil
 }
 
