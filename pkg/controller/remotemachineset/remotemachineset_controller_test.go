@@ -810,7 +810,7 @@ func testMachineSet(name string, machineType string, unstompedAnnotation bool, r
 			},
 			Generation: int64(generation),
 			Annotations: map[string]string{
-				constants.HiveManagedAnnotation: "true",
+				constants.HiveManagedLabel: "true",
 			},
 		},
 		Spec: machineapi.MachineSetSpec{

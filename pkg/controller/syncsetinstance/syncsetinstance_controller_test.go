@@ -953,7 +953,7 @@ func testSecret(name, data string) *corev1.Secret {
 func testSecretWithManagedAnnotation(name, data string) *corev1.Secret {
 	s := testSecret(name, data)
 	s.Annotations = map[string]string{
-		constants.HiveManagedAnnotation: "true",
+		constants.HiveManagedLabel: "true",
 	}
 	return s
 }

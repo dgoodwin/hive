@@ -129,7 +129,7 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "bar"}))
 
 				By("Verify the managed-by-Hive annotation was injected automatically")
-				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedLabel]).Should(Equal("true"))
 
 				By("Delete the syncset and verify syncset and syncsetinstance are deleted")
 				deleteSyncSets(hiveClient, clusterNamespace, "test-syncresource")
@@ -210,7 +210,7 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-merge"}))
-				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedLabel]).Should(Equal("true"))
 				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
 				Ω(resultConfigMap.Annotations["patch1"]).Should(Equal("true"))
 
@@ -241,7 +241,7 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-strategic"}))
-				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedLabel]).Should(Equal("true"))
 				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
 				Ω(resultConfigMap.Annotations["patch2"]).Should(Equal("true"))
 
@@ -272,7 +272,7 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-json"}))
-				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedLabel]).Should(Equal("true"))
 				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
 				Ω(resultConfigMap.Annotations["patch3"]).Should(Equal("true"))
 			})

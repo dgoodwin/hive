@@ -345,7 +345,7 @@ func (r *ReconcileRemoteMachineSet) generateMachineSets(
 		if ms.Annotations == nil {
 			ms.Annotations = make(map[string]string, 1)
 		}
-		ms.Annotations[constants.HiveManagedAnnotation] = "true"
+		ms.Annotations[constants.HiveManagedLabel] = "true"
 	}
 
 	logger.Infof("generated %v worker machine sets", len(generatedMachineSets))

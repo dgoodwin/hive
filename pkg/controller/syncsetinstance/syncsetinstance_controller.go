@@ -680,7 +680,7 @@ func applyResource(u *unstructured.Unstructured, logger log.FieldLogger, applyFn
 		annotations = make(map[string]string, 1)
 	}
 	// Inject the hive managed annotation to help end-users see that a resource is managed by hive:
-	annotations[constants.HiveManagedAnnotation] = "true"
+	annotations[constants.HiveManagedLabel] = "true"
 	u.SetAnnotations(annotations)
 
 	bytes, err := json.Marshal(u)
@@ -815,7 +815,7 @@ func injectPatchAnnotation(ssPatch hivev1.SyncObjectPatch) (string, error) {
 		}
 		patchData = append(patchData, map[string]string{
 			"op":    "add",
-			"path":  fmt.Sprintf("/metadata/annotations/%s", constants.HiveManagedAnnotation),
+			"path":  fmt.Sprintf("/metadata/annotations/%s", constants.HiveManagedLabel),
 			"value": "true",
 		})
 		patchBytes, err := json.Marshal(patchData)
@@ -839,7 +839,7 @@ func injectPatchAnnotation(ssPatch hivev1.SyncObjectPatch) (string, error) {
 	}
 
 	annotations := metadata["annotations"].(map[string]interface{})
-	annotations[constants.HiveManagedAnnotation] = "true"
+	annotations[constants.HiveManagedLabel] = "true"
 
 	patchBytes, err := json.Marshal(patchData)
 	return string(patchBytes), err
@@ -905,7 +905,7 @@ func (r *ReconcileSyncSetInstance) applySyncSetSecretMappings(ssi *hivev1.SyncSe
 		if secret.Annotations == nil {
 			secret.Annotations = make(map[string]string, 1)
 		}
-		secret.Annotations[constants.HiveManagedAnnotation] = "true"
+		secret.Annotations[constants.HiveManagedLabel] = "true"
 
 		var hash string
 		hash, applyErr = controllerutils.GetChecksumOfObject(secret)
