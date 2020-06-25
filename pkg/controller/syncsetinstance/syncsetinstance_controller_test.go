@@ -1636,3 +1636,57 @@ func TestFilterApplyError(t *testing.T) {
 		t.Errorf("expected error message to be unchanged")
 	}
 }
+
+func TestPatchInjectHiveManagedAnnotation(t *testing.T) {
+	tests := []struct {
+		name          string
+		patch         string
+		patchMode     string
+		expectedPatch string
+	}{
+		{
+			name:          "strategic patch with annotation",
+			patch:         `{ "metadata": { "annotations": { "patch1": "true" } }, "data": { "foo": "baz-strategic" } }`,
+			patchMode:     "strategic",
+			expectedPatch: `{"data":{"foo":"baz-strategic"},"metadata":{"annotations":{"hive.openshift.io/managed":"true","patch1":"true"}}}`,
+		},
+		{
+			name:          "strategic patch",
+			patch:         `{ "data": { "foo": "baz-strategic" } }`,
+			patchMode:     "strategic",
+			expectedPatch: `{"data":{"foo":"baz-strategic"},"metadata":{"annotations":{"hive.openshift.io/managed":"true"}}}`,
+		},
+		{
+			name:          "merge patch with annotation",
+			patch:         `{ "metadata": { "annotations": { "patch1": "true" } }, "data": { "foo": "baz-merge" } }`,
+			patchMode:     "merge",
+			expectedPatch: `{"data":{"foo":"baz-merge"},"metadata":{"annotations":{"hive.openshift.io/managed":"true","patch1":"true"}}}`,
+		},
+		{
+			name:          "merge patch",
+			patch:         `{ "data": { "foo": "baz-merge" } }`,
+			patchMode:     "merge",
+			expectedPatch: `{"data":{"foo":"baz-merge"},"metadata":{"annotations":{"hive.openshift.io/managed":"true"}}}`,
+		},
+		// TODO: test with yaml formatted
+		{
+			name:          "json patch",
+			patch:         `[ { "op": "replace", "path": "/data/foo", "value": "baz-json" } ]`,
+			patchMode:     "json",
+			expectedPatch: `[{"op":"replace","path":"/data/foo","value":"baz-json"},{"op":"add","path":"/metadata/annotations/hive.openshift.io/managed","value":"true"}]`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ssPatch := hivev1.SyncObjectPatch{
+				PatchType: test.patchMode,
+				Patch:     test.patch,
+			}
+			output, err := injectPatchAnnotation(ssPatch)
+			assert.NoError(t, err)
+			// JSON marshaled output should be deterministic with Go's library:
+			assert.Equal(t, test.expectedPatch, output)
+		})
+	}
+}

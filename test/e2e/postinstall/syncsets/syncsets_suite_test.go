@@ -152,6 +152,9 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "foo",
 						Namespace: "default",
+						Annotations: map[string]string{
+							"hello": "world",
+						},
 					},
 					Data: map[string]string{
 						"foo": "bar",
@@ -194,7 +197,7 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "bar"}))
 
 				By("Create a syncpatch with merge patchType and verify syncpatch created successfully")
-				patch := `{ "data": { "foo": "baz-merge" } }`
+				patch := `{ "metadata": { "annotations": { "patch1": "true" } }, "data": { "foo": "baz-merge" } }`
 				patchType := "merge"
 				syncPatchWithMergeType := testSyncSetPatch(patch, patchType)
 				err = hiveClient.Create(ctx, syncPatchWithMergeType)
@@ -207,6 +210,9 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-merge"}))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
+				Ω(resultConfigMap.Annotations["patch1"]).Should(Equal("true"))
 
 				By("Delete the SyncSetPatch and verify syncset and syncsetinstance are deleted")
 				deleteSyncSets(hiveClient, clusterNamespace, "test-syncpatch")
@@ -215,8 +221,14 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = waitForSyncSetInstanceDeleted(clusterNamespace, "test-syncpatch", "syncset")
 				Ω(err).ShouldNot(HaveOccurred())
 
+				By("Recreate ConfigMap")
+				err = targetClusterClient.Delete(ctx, configMap)
+				Ω(err).ShouldNot(HaveOccurred())
+				err = targetClusterClient.Create(ctx, configMap)
+				Ω(err).ShouldNot(HaveOccurred())
+
 				By("Create a syncpatch with strategic patchType and verify syncpatch create successfully")
-				patch = `{ "data": { "foo": "baz-strategic" } }`
+				patch = `{ "metadata": { "annotations": { "patch2": "true" } }, "data": { "foo": "baz-strategic" } }`
 				patchType = "strategic"
 				syncPatchWithstrategicType := testSyncSetPatch(patch, patchType)
 				err = hiveClient.Create(ctx, syncPatchWithstrategicType)
@@ -229,6 +241,9 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-strategic"}))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
+				Ω(resultConfigMap.Annotations["patch2"]).Should(Equal("true"))
 
 				By("Delete the SyncSetPatch and verify syncset and syncsetinstance are deleted")
 				deleteSyncSets(hiveClient, clusterNamespace, "test-syncpatch")
@@ -237,8 +252,14 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = waitForSyncSetInstanceDeleted(clusterNamespace, "test-syncpatch", "syncset")
 				Ω(err).ShouldNot(HaveOccurred())
 
+				By("Recreate ConfigMap")
+				err = targetClusterClient.Delete(ctx, configMap)
+				Ω(err).ShouldNot(HaveOccurred())
+				err = targetClusterClient.Create(ctx, configMap)
+				Ω(err).ShouldNot(HaveOccurred())
+
 				By("Create a syncpatch with json patchType and verify syncpatch created successfully")
-				patch = `[ { "op": "replace", "path": "/data/foo", "value": "baz-json" } ]`
+				patch = `[ { "op": "replace", "path": "/data/foo", "value": "baz-json" }, { "op": "add", "path": "/metadata/annotations/patch3", "value": "true" } ]`
 				patchType = "json"
 				syncPatchWithPatchType := testSyncSetPatch(patch, patchType)
 				err = hiveClient.Create(ctx, syncPatchWithPatchType)
@@ -251,6 +272,9 @@ var _ = Describe("Test Syncset and SelectorSyncSet func", func() {
 				err = targetClusterClient.Get(ctx, client.ObjectKey{Name: "foo", Namespace: "default"}, resultConfigMap)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(resultConfigMap.Data).Should(Equal(map[string]string{"foo": "baz-json"}))
+				Ω(resultConfigMap.Annotations[constants.HiveManagedAnnotation]).Should(Equal("true"))
+				Ω(resultConfigMap.Annotations["hello"]).Should(Equal("world"))
+				Ω(resultConfigMap.Annotations["patch3"]).Should(Equal("true"))
 			})
 
 			It("Test syncSet secretMappings", func() {

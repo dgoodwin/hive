@@ -805,6 +805,46 @@ func (r *ReconcileSyncSetInstance) applySyncSetPatches(ssi *hivev1.SyncSetInstan
 	return nil
 }
 
+func injectPatchAnnotation(ssPatch hivev1.SyncObjectPatch) (string, error) {
+
+	if ssPatch.PatchType == "json" {
+		patchData := make([]map[string]string, 1)
+		err := json.Unmarshal([]byte(ssPatch.Patch), &patchData)
+		if err != nil {
+			return "", err
+		}
+		patchData = append(patchData, map[string]string{
+			"op":    "add",
+			"path":  fmt.Sprintf("/metadata/annotations/%s", constants.HiveManagedAnnotation),
+			"value": "true",
+		})
+		patchBytes, err := json.Marshal(patchData)
+		return string(patchBytes), err
+	}
+
+	patchData := make(map[string]interface{})
+	err := json.Unmarshal([]byte(ssPatch.Patch), &patchData)
+	if err != nil {
+		return "", err
+	}
+
+	// strategic and merge patches can be handled the same
+	if _, ok := patchData["metadata"]; !ok {
+		patchData["metadata"] = make(map[string]interface{})
+	}
+	metadata := patchData["metadata"].(map[string]interface{})
+
+	if _, ok := metadata["annotations"]; !ok {
+		metadata["annotations"] = make(map[string]interface{})
+	}
+
+	annotations := metadata["annotations"].(map[string]interface{})
+	annotations[constants.HiveManagedAnnotation] = "true"
+
+	patchBytes, err := json.Marshal(patchData)
+	return string(patchBytes), err
+}
+
 // applySyncSetSecretMappings evaluates secret mappings and applies them to the cluster identified by kubeConfig
 func (r *ReconcileSyncSetInstance) applySyncSetSecretMappings(ssi *hivev1.SyncSetInstance, secretMappings []hivev1.SecretMapping, applyBehavior hivev1.SyncSetApplyBehavior, dynamicClient dynamic.Interface, h Applier, ssiLog log.FieldLogger) error {
 	ssiLog = ssiLog.WithField("applyTerm", "secret")
