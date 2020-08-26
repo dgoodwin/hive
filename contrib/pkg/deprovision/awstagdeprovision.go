@@ -2,13 +2,18 @@ package deprovision
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/openshift/installer/pkg/destroy/aws"
+	"github.com/fsnotify/fsnotify"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/openshift/installer/pkg/destroy/aws"
+
+	"github.com/openshift/hive/pkg/constants"
 )
 
 // NewDeprovisionAWSWithTagsCommand is the entrypoint to create the 'aws-tag-deprovision' subcommand
@@ -25,9 +30,47 @@ func NewDeprovisionAWSWithTagsCommand() *cobra.Command {
 				log.WithError(err).Error("Cannot complete command")
 				return
 			}
+			// Parse credentials from files mounted in as a secret volume and set as env vars. We use the file
+			// instead of passing env vars directly so we can monitor for changes and restart the pod if an admin
+			// modifies the creds secret after the uninstall job has launched.
+			data, err := ioutil.ReadFile(filepath.Join(constants.AWSCredsMount, "aws_access_key_id"))
+			if err != nil {
+				log.WithError(err).Fatal("error reading aws_access_key_id file")
+			}
+			os.Setenv("AWS_ACCESS_KEY_ID", string(data))
+			data, err = ioutil.ReadFile(filepath.Join(constants.AWSCredsMount, "aws_secret_access_key"))
+			if err != nil {
+				log.WithError(err).Fatal("error reading aws_secret_access_key file")
+			}
+			os.Setenv("AWS_SECRET_ACCESS_KEY", string(data))
+
+			// creates a new file watcher
+			watcher, err := fsnotify.NewWatcher()
+			if err != nil {
+				log.WithError(err).Fatal("error creating fsnotify watcher")
+			}
+			defer watcher.Close()
+			done := make(chan bool)
+			go func() {
+				for {
+					select {
+					case event := <-watcher.Events:
+						log.WithField("event", event).Fatalf("file changes detected in %s, restarting pod", constants.AWSCredsMount)
+					case err := <-watcher.Errors:
+						log.WithError(err).Fatalf("%s file watch error, restarting pod", constants.AWSCredsMount)
+					}
+				}
+			}()
+
+			// out of the box fsnotify can watch a single file, or a single directory
+			if err := watcher.Add("/etc/aws-creds"); err != nil {
+				log.WithError(err).Fatal("error establishing watch on /etc/aws-creds")
+			}
+
 			if err := opt.Run(); err != nil {
 				log.WithError(err).Fatal("Runtime error")
 			}
+			<-done
 		},
 	}
 	flags := cmd.Flags()
@@ -37,6 +80,7 @@ func NewDeprovisionAWSWithTagsCommand() *cobra.Command {
 }
 
 func completeAWSUninstaller(o *aws.ClusterUninstaller, logLevel string, args []string) error {
+
 	for _, arg := range args {
 		filter := aws.Filter{}
 		err := parseFilter(filter, arg)
