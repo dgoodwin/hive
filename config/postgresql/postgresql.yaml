@@ -1,11 +1,12 @@
 ---
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: postgres-config
   labels:
     app: postgres
-data:
+type: Opaque
+stringData:
   POSTGRESQL_DATABASE: hive
   POSTGRESQL_USER: hive
   POSTGRESQL_PASSWORD: helloworld
@@ -44,7 +45,7 @@ spec:
           ports:
             - containerPort: 5432
           envFrom:
-            - configMapRef:
+            - secretRef:
                 name: postgres-config
           volumeMounts:
             - mountPath: /var/lib/postgresql/data:z
