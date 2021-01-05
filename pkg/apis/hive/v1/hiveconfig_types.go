@@ -86,6 +86,11 @@ type HiveConfigSpec struct {
 	ControllersConfig *ControllersConfig `json:"controllersConfig,omitempty"`
 
 	FeatureGates *FeatureGateSelection `json:"featureGates,omitempty"`
+
+	// StorageBackend is a used for additional storage of Hive data that is not suitable for Kubernetes
+	// Custom Resources and Etcd. (presently only used for storing the state of SyncSets per ClusterDeployment)
+	// +optional
+	StorageBackend *StorageBackendConfig `json:"storageBackend,omitempty"`
 }
 
 // FeatureSet defines the set of feature gates that should be used.
@@ -132,6 +137,26 @@ var FeatureSets = map[FeatureSet]*FeatureGatesEnabled{
 	CustomFeatureSet: {
 		Enabled: []string{},
 	},
+}
+
+// StorageBackendConfig configures the additional storage backend for Hive.
+type StorageBackendConfig struct {
+
+	// PostgreSQL configures the connection details for a PostgreSQL DB.
+	// +optional
+	PostgreSQL *PostgreSQLStorageBackend `json:"postgresql,omitempty"`
+}
+
+type PostgreSQLStorageBackend struct {
+
+	// CredentialsSecretRef references a secret in the TargetNamespace that will be used to authenticate with PostgreSQL.
+	// Example Secret:
+	//   data:
+	//     POSTGRESQL_DATABASE: hive
+	//     POSTGRESQL_USER: hive
+	//     POSTGRESQL_PASSWORD: helloworld
+	//     POSTGRESQL_HOST: postgres
+	CredentialsSecretRef corev1.LocalObjectReference `json:"credentialsSecretRef"`
 }
 
 // HiveConfigStatus defines the observed state of Hive
@@ -182,8 +207,9 @@ type FailedProvisionConfig struct {
 	// TODO: Figure out how to mark SkipGatherLogs as deprecated (more than just a comment)
 
 	// DEPRECATED: This flag is no longer respected and will be removed in the future.
-	SkipGatherLogs bool                      `json:"skipGatherLogs,omitempty"`
-	AWS            *FailedProvisionAWSConfig `json:"aws,omitempty"`
+	SkipGatherLogs bool `json:"skipGatherLogs,omitempty"`
+
+	AWS *S3Config `json:"aws,omitempty"`
 }
 
 // ManageDNSConfig contains the domain being managed, and the cloud-specific
@@ -210,8 +236,8 @@ type ManageDNSConfig struct {
 	// may be configured at a time.
 }
 
-// FailedProvisionAWSConfig contains AWS-specific info to upload log files.
-type FailedProvisionAWSConfig struct {
+// S3Config contains AWS-specific info to upload log files.
+type S3Config struct {
 	// CredentialsSecretRef references a secret in the TargetNamespace that will be used to authenticate with
 	// AWS S3. It will need permission to upload logs to S3.
 	// Secret should have keys named aws_access_key_id and aws_secret_access_key that contain the AWS credentials.

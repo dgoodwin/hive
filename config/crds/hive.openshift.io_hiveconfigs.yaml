@@ -217,8 +217,7 @@ spec:
                 to handling provision failures.
               properties:
                 aws:
-                  description: FailedProvisionAWSConfig contains AWS-specific info
-                    to upload log files.
+                  description: S3Config contains AWS-specific info to upload log files.
                   properties:
                     bucket:
                       description: Bucket is the S3 bucket to store the logs in.
@@ -389,6 +388,31 @@ spec:
                 - domains
                 type: object
               type: array
+            storageBackend:
+              description: StorageBackend is a used for additional storage of Hive
+                data that is not suitable for Kubernetes Custom Resources and Etcd.
+                (presently only used for storing the state of SyncSets per ClusterDeployment)
+              properties:
+                postgresql:
+                  description: PostgreSQL configures the connection details for a
+                    PostgreSQL DB.
+                  properties:
+                    credentialsSecretRef:
+                      description: 'CredentialsSecretRef references a secret in the
+                        TargetNamespace that will be used to authenticate with PostgreSQL.
+                        Example Secret:   data:     POSTGRESQL_DATABASE: hive     POSTGRESQL_USER:
+                        hive     POSTGRESQL_PASSWORD: helloworld     POSTGRESQL_HOST:
+                        postgres'
+                      properties:
+                        name:
+                          description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            TODO: Add other useful fields. apiVersion, kind, uid?'
+                          type: string
+                      type: object
+                  required:
+                  - credentialsSecretRef
+                  type: object
+              type: object
             syncSetReapplyInterval:
               description: SyncSetReapplyInterval is a string duration indicating
                 how much time must pass before SyncSet resources will be reapplied.

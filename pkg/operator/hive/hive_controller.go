@@ -325,6 +325,16 @@ func (r *ReconcileHiveConfig) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
+	if instance.Spec.StorageBackend == nil || instance.Spec.StorageBackend.PostgreSQL == nil {
+		hLog.Error("no hiveconfig.spec.storageBackend is configured, unable to deploy hive")
+		return reconcile.Result{}, nil
+	}
+	err = r.configurePostgresql(hLog, instance)
+	if err != nil {
+		hLog.WithError(err).Error("error configuring postgresql storage backend")
+		return reconcile.Result{}, err
+	}
+
 	h, err := resource.NewHelperFromRESTConfig(r.restConfig, hLog)
 	if err != nil {
 		hLog.WithError(err).Error("error creating resource helper")

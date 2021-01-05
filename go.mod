@@ -20,6 +20,7 @@ require (
 	github.com/heptio/velero v1.0.0
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/json-iterator/go v1.1.10
+	github.com/lib/pq v1.9.0
 	github.com/miekg/dns v1.1.22
 	github.com/modern-go/reflect2 v1.0.1
 	github.com/onsi/ginkgo v1.14.1
