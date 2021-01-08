@@ -7,9 +7,14 @@ metadata:
     app: postgres
 type: Opaque
 stringData:
+  # Vars for registry.redhat.io container:
   POSTGRESQL_DATABASE: hive
   POSTGRESQL_USER: hive
   POSTGRESQL_PASSWORD: helloworld
+  # Vars for upstream docker.io postgres container:
+  POSTGRES_DB: hive
+  POSTGRES_USER: hive
+  POSTGRES_PASSWORD: helloworld
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -40,7 +45,8 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: registry.redhat.io/rhel8/postgresql-12
+          #image: registry.redhat.io/rhel8/postgresql-12
+          image: postgres:12
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432
