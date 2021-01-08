@@ -7,6 +7,8 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// TODO: this type can likely be dropped with the new db storage layer.
+
 // ClusterSyncLease is a record of the last time that SyncSets and SelectorSyncSets were applied to a cluster.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path=clustersyncleases,shortName=csl,scope=Namespaced

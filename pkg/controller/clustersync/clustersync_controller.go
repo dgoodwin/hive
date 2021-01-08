@@ -41,6 +41,7 @@ import (
 	"github.com/openshift/hive/pkg/constants"
 	hivemetrics "github.com/openshift/hive/pkg/controller/metrics"
 	controllerutils "github.com/openshift/hive/pkg/controller/utils"
+	"github.com/openshift/hive/pkg/datastore"
 	"github.com/openshift/hive/pkg/remoteclient"
 	"github.com/openshift/hive/pkg/resource"
 )
@@ -159,6 +160,12 @@ func NewReconciler(mgr manager.Manager, rateLimiter flowcontrol.RateLimiter) (*R
 			return nil, err
 		}
 	}
+
+	ds, err := datastore.BuildDataStore()
+	if err != nil {
+		return nil, err
+	}
+
 	log.WithField("reapplyInterval", reapplyInterval).Info("Reapply interval set")
 	c := controllerutils.NewClientWithMetricsOrDie(mgr, ControllerName, &rateLimiter)
 	return &ReconcileClusterSync{
@@ -166,6 +173,7 @@ func NewReconciler(mgr manager.Manager, rateLimiter flowcontrol.RateLimiter) (*R
 		logger:                logger,
 		reapplyInterval:       reapplyInterval,
 		resourceHelperBuilder: resourceHelperBuilderFunc,
+		ds:                    ds,
 		remoteClusterAPIClientBuilder: func(cd *hivev1.ClusterDeployment) remoteclient.Builder {
 			return remoteclient.NewBuilder(c, cd, ControllerName)
 		},
@@ -265,6 +273,7 @@ type ReconcileClusterSync struct {
 	client.Client
 	logger          log.FieldLogger
 	reapplyInterval time.Duration
+	ds              datastore.DataStore
 
 	resourceHelperBuilder func(*rest.Config, bool, log.FieldLogger) (resource.Helper, error)
 
@@ -403,18 +412,16 @@ func (r *ReconcileClusterSync) Reconcile(request reconcile.Request) (reconcile.R
 
 	needToCreateClusterSync := false
 	clusterSync := &hiveintv1alpha1.ClusterSync{}
-	switch err := r.Get(context.Background(), request.NamespacedName, clusterSync); {
-	case apierrors.IsNotFound(err):
+	switch clusterSync, err := r.ds.Get(request.NamespacedName.Namespace, request.NamespacedName.Name); {
+	case clusterSync == nil && err == nil:
 		logger.Info("creating ClusterSync as it does not exist")
 		clusterSync.Namespace = cd.Namespace
 		clusterSync.Name = cd.Name
-		ownerRef := metav1.NewControllerRef(cd, cd.GroupVersionKind())
-		ownerRef.Controller = nil
-		clusterSync.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-		if err := r.Create(context.Background(), clusterSync); err != nil {
+		if err := r.ds.Create(clusterSync); err != nil {
 			logger.WithError(err).Log(controllerutils.LogLevel(err), "could not create ClusterSync")
 			return reconcile.Result{}, err
 		}
+		// TODO: remove observations, not needed with the db commits
 		recobsrv.SetOutcome(hivemetrics.ReconcileOutcomeClusterSyncCreated)
 		// requeue immediately so that we reconcile soon after the ClusterSync is created
 		return reconcile.Result{Requeue: true}, nil
@@ -488,7 +495,7 @@ func (r *ReconcileClusterSync) Reconcile(request reconcile.Request) (reconcile.R
 	// Update the ClusterSync
 	if !reflect.DeepEqual(origStatus, &clusterSync.Status) {
 		logger.Info("updating ClusterSync")
-		if err := r.Status().Update(context.Background(), clusterSync); err != nil {
+		if err := r.ds.Update(clusterSync); err != nil {
 			logger.WithError(err).Log(controllerutils.LogLevel(err), "could not update ClusterSync")
 			return reconcile.Result{}, err
 		}
