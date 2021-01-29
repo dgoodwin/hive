@@ -1649,10 +1649,12 @@ stringData:
   POSTGRESQL_DATABASE: hive
   POSTGRESQL_USER: hive
   POSTGRESQL_PASSWORD: helloworld
+  POSTGRESQL_HOST: postgres
   # Vars for upstream docker.io postgres container:
   POSTGRES_DB: hive
   POSTGRES_USER: hive
   POSTGRES_PASSWORD: helloworld
+  POSTGRES_HOST: postgres
 `)
 
 func configPostgresqlConfigSecretYamlBytes() ([]byte, error) {
@@ -1776,7 +1778,7 @@ func configPostgresqlSchema20210108114509_clustersyncTableSql() (*asset, error) 
 	return a, nil
 }
 
-var _configPostgresqlSvcYaml = []byte(`
+var _configPostgresqlSvcYaml = []byte(`apiVersion: v1
 kind: Service
 metadata:
   name: postgres

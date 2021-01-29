@@ -2,16 +2,17 @@ package hive
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/pressly/goose"
 	log "github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	_ "github.com/openshift/hive/migration"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"github.com/openshift/hive/pkg/operator/util"
 	"github.com/openshift/hive/pkg/resource"
@@ -42,24 +43,47 @@ func (r *ReconcileHiveConfig) configurePostgresql(hLog log.FieldLogger, hiveNSNa
 		hLog.WithField("asset", assetPath).Info("applied asset with namespace override")
 	}
 
-	hLog.Info("configuring postgresql storage")
-
 	postgresParams, err := r.getPostgresParams(hLog, hiveCfg)
-
-	db, err := sql.Open("postgres", postgresParams)
 	if err != nil {
-		log.WithError(err).Fatal("error connecting to database")
+		hLog.WithError(err).Error("error getting postgres connection params")
 	}
-	log.Infof("database connection established: %v", db)
 
-	hLog.Info("postgresql storage configured")
+	// TODO: Remove this. Seriously
+	// ##########################################################################################
+	hLog.WithField("dbStr", postgresParams).Info("TODO WARNING REMOVE THIS REALLY")
+
+	// Postgresql will take a few seconds to come up, until then we error and re-reconcile:
+	hLog.Info("connecting to postgres db for migrations")
+	db, err := goose.OpenDBWithDriver("postgres", postgresParams)
+	if err != nil {
+		hLog.WithError(err).Error("unable to connect to postgresql (may not be ready yet)")
+		return err
+	}
+	hLog.Infof("database connection established: %v", db)
+
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.WithError(err).Error("error closing db connection")
+		}
+	}()
+
+	hLog.Info("running db migrations")
+	err = goose.Run("up", db, ".", []string{}...) // dir is unused for us as we use go migrations
+	if err != nil {
+		hLog.WithError(err).Error("error running db migrations")
+		return err
+	}
+	hLog.Info("postgresql schema up to date")
+
 	return nil
 }
 
 func (r *ReconcileHiveConfig) getPostgresParams(hLog log.FieldLogger, hiveCfg *hivev1.HiveConfig) (string, error) {
 	hiveNS := getHiveNamespace(hiveCfg)
 	secretName := types.NamespacedName{
-		Name:      hiveCfg.Spec.StorageBackend.PostgreSQL.CredentialsSecretRef.Name,
+		// TODO: hookup properly with configurable secret
+		//	Name:      hiveCfg.Spec.StorageBackend.PostgreSQL.CredentialsSecretRef.Name,
+		Name:      "postgres-config",
 		Namespace: hiveNS,
 	}
 	postgresConfigSecret := &corev1.Secret{}
@@ -90,10 +114,8 @@ func (r *ReconcileHiveConfig) getPostgresParams(hLog log.FieldLogger, hiveCfg *h
 	}
 
 	postgresParams := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", host, user, password, dbName)
-	// TODO: definitely remove this
-	hLog.WithField("postgresParams", postgresParams).Info("built postgres params string")
 
-	return "", nil
+	return postgresParams, nil
 }
 
 func getSecretKey(sec *corev1.Secret, key string) (string, error) {
