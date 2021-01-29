@@ -1,9 +1,9 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: postgres-pv-claim
+  name: hive-postgresql
   labels:
-    app: postgres
+    app: hive-postgresql
 spec:
   accessModes:
     - ReadWriteOnce

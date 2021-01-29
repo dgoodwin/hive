@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres
+  name: hive-postgresql
   labels:
-    app: postgres
+    app: hive-postgresql
 spec:
   ports:
    - port: 5432
   selector:
-   app: postgres
+   app: hive-postgresql

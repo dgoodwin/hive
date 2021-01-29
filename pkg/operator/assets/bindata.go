@@ -1640,7 +1640,7 @@ func configConfigmapsInstallLogRegexesConfigmapYaml() (*asset, error) {
 var _configPostgresqlConfigSecretYaml = []byte(`apiVersion: v1
 kind: Secret
 metadata:
-  name: postgres-config
+  name: hive-postgres-config
   labels:
     app: postgres
 type: Opaque
@@ -1649,7 +1649,7 @@ stringData:
   POSTGRESQL_DATABASE: hive
   POSTGRESQL_USER: hive
   POSTGRESQL_PASSWORD: helloworld
-  POSTGRESQL_HOST: postgres
+  POSTGRESQL_HOST: hive-postgresql
   # Vars for upstream docker.io postgres container:
   POSTGRES_DB: hive
   POSTGRES_USER: hive
@@ -1675,34 +1675,34 @@ func configPostgresqlConfigSecretYaml() (*asset, error) {
 var _configPostgresqlDeploymentYaml = []byte(`apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: postgres
+  name: hive-postgresql
 spec:
   selector:
     matchLabels:
-      app: postgres
+      app: hive-postgresql
   replicas: 1
   template:
     metadata:
       labels:
-        app: postgres
+        app: hive-postgresql
     spec:
       containers:
         - name: postgres
-          image: registry.redhat.io/rhel8/postgresql-12
-          #image: postgres:12
+          image: registry.redhat.io/rhel8/postgresql-12 # image that works on OpenShift 4 but requires pull secret
+          #image: postgres:12 # image that works on raw Kube but not OpenShift
           imagePullPolicy: "IfNotPresent"
           ports:
             - containerPort: 5432
           envFrom:
             - secretRef:
-                name: postgres-config
+                name: hive-postgres-config
           volumeMounts:
             - mountPath: /var/lib/postgresql/data:z
               name: postgredb
       volumes:
         - name: postgredb
           persistentVolumeClaim:
-            claimName: postgres-pv-claim
+            claimName: hive-postgresql
 `)
 
 func configPostgresqlDeploymentYamlBytes() ([]byte, error) {
@@ -1723,9 +1723,9 @@ func configPostgresqlDeploymentYaml() (*asset, error) {
 var _configPostgresqlPvcYaml = []byte(`kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: postgres-pv-claim
+  name: hive-postgresql
   labels:
-    app: postgres
+    app: hive-postgresql
 spec:
   accessModes:
     - ReadWriteOnce
@@ -1781,14 +1781,14 @@ func configPostgresqlSchema20210108114509_clustersyncTableSql() (*asset, error) 
 var _configPostgresqlSvcYaml = []byte(`apiVersion: v1
 kind: Service
 metadata:
-  name: postgres
+  name: hive-postgresql
   labels:
-    app: postgres
+    app: hive-postgresql
 spec:
   ports:
    - port: 5432
   selector:
-   app: postgres
+   app: hive-postgresql
 `)
 
 func configPostgresqlSvcYamlBytes() ([]byte, error) {

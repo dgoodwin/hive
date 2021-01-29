@@ -83,7 +83,7 @@ func (r *ReconcileHiveConfig) getPostgresParams(hLog log.FieldLogger, hiveCfg *h
 	secretName := types.NamespacedName{
 		// TODO: hookup properly with configurable secret
 		//	Name:      hiveCfg.Spec.StorageBackend.PostgreSQL.CredentialsSecretRef.Name,
-		Name:      "postgres-config",
+		Name:      "hive-postgres-config",
 		Namespace: hiveNS,
 	}
 	postgresConfigSecret := &corev1.Secret{}
