@@ -48,10 +48,6 @@ func (r *ReconcileHiveConfig) configurePostgresql(hLog log.FieldLogger, hiveNSNa
 		hLog.WithError(err).Error("error getting postgres connection params")
 	}
 
-	// TODO: Remove this. Seriously
-	// ##########################################################################################
-	hLog.WithField("dbStr", postgresParams).Info("TODO WARNING REMOVE THIS REALLY")
-
 	// Postgresql will take a few seconds to come up, until then we error and re-reconcile:
 	hLog.Info("connecting to postgres db for migrations")
 	db, err := goose.OpenDBWithDriver("postgres", postgresParams)
