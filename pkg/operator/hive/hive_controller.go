@@ -332,10 +332,6 @@ func (r *ReconcileHiveConfig) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	if instance.Spec.StorageBackend == nil || instance.Spec.StorageBackend.PostgreSQL == nil {
-		hLog.Error("no hiveconfig.spec.storageBackend is configured, unable to deploy hive")
-		return reconcile.Result{}, nil
-	}
 	err = r.configurePostgresql(hLog, hiveNSName, h, instance)
 	if err != nil {
 		hLog.WithError(err).Error("error configuring postgresql storage backend")

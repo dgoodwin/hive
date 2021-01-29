@@ -86,11 +86,6 @@ type HiveConfigSpec struct {
 	ControllersConfig *ControllersConfig `json:"controllersConfig,omitempty"`
 
 	FeatureGates *FeatureGateSelection `json:"featureGates,omitempty"`
-
-	// StorageBackend is a used for additional storage of Hive data that is not suitable for Kubernetes
-	// Custom Resources and Etcd. (presently only used for storing the state of SyncSets per ClusterDeployment)
-	// +optional
-	StorageBackend *StorageBackendConfig `json:"storageBackend,omitempty"`
 }
 
 // FeatureSet defines the set of feature gates that should be used.
@@ -137,26 +132,6 @@ var FeatureSets = map[FeatureSet]*FeatureGatesEnabled{
 	CustomFeatureSet: {
 		Enabled: []string{},
 	},
-}
-
-// StorageBackendConfig configures the additional storage backend for Hive.
-type StorageBackendConfig struct {
-
-	// PostgreSQL configures the connection details for a PostgreSQL DB.
-	// +optional
-	PostgreSQL *PostgreSQLStorageBackend `json:"postgresql,omitempty"`
-}
-
-type PostgreSQLStorageBackend struct {
-
-	// CredentialsSecretRef references a secret in the TargetNamespace that will be used to authenticate with PostgreSQL.
-	// Example Secret:
-	//   data:
-	//     POSTGRESQL_DATABASE: hive
-	//     POSTGRESQL_USER: hive
-	//     POSTGRESQL_PASSWORD: helloworld
-	//     POSTGRESQL_HOST: postgres
-	CredentialsSecretRef corev1.LocalObjectReference `json:"credentialsSecretRef"`
 }
 
 // HiveConfigStatus defines the observed state of Hive
