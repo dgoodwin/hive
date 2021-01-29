@@ -439,6 +439,9 @@ github.com/matoous/godox
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
 github.com/mattn/go-isatty
+# github.com/mattn/go-sqlite3 v1.10.0
+## explicit
+github.com/mattn/go-sqlite3
 # github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/metal3-io/baremetal-operator v0.0.0 => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe
@@ -638,6 +641,9 @@ github.com/phayes/checkstyle
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
+# github.com/pressly/goose v2.7.0+incompatible
+## explicit
+github.com/pressly/goose
 # github.com/prometheus/client_golang v1.7.1
 ## explicit
 github.com/prometheus/client_golang/prometheus

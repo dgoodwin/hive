@@ -21,6 +21,7 @@ require (
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/json-iterator/go v1.1.10
 	github.com/lib/pq v1.9.0
+	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/miekg/dns v1.1.22
 	github.com/modern-go/reflect2 v1.0.1
 	github.com/onsi/ginkgo v1.14.1
@@ -36,6 +37,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20201109112824-093ad3cf6600
 	github.com/openshift/machine-api-operator v0.2.1-0.20201111151924-77300d0c997a
 	github.com/pkg/errors v0.9.1
+	github.com/pressly/goose v2.7.0+incompatible
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/sirupsen/logrus v1.6.0
