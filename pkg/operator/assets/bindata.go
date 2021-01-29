@@ -29,6 +29,11 @@
 // config/rbac/hive_reader_role.yaml
 // config/rbac/hive_reader_role_binding.yaml
 // config/configmaps/install-log-regexes-configmap.yaml
+// config/postgresql/config-secret.yaml
+// config/postgresql/deployment.yaml
+// config/postgresql/pvc.yaml
+// config/postgresql/schema/20210108114509_clustersync-table.sql
+// config/postgresql/svc.yaml
 package assets
 
 import (
@@ -1632,6 +1637,173 @@ func configConfigmapsInstallLogRegexesConfigmapYaml() (*asset, error) {
 	return a, nil
 }
 
+var _configPostgresqlConfigSecretYaml = []byte(`apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-config
+  labels:
+    app: postgres
+type: Opaque
+stringData:
+  # Vars for registry.redhat.io container:
+  POSTGRESQL_DATABASE: hive
+  POSTGRESQL_USER: hive
+  POSTGRESQL_PASSWORD: helloworld
+  # Vars for upstream docker.io postgres container:
+  POSTGRES_DB: hive
+  POSTGRES_USER: hive
+  POSTGRES_PASSWORD: helloworld
+`)
+
+func configPostgresqlConfigSecretYamlBytes() ([]byte, error) {
+	return _configPostgresqlConfigSecretYaml, nil
+}
+
+func configPostgresqlConfigSecretYaml() (*asset, error) {
+	bytes, err := configPostgresqlConfigSecretYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/postgresql/config-secret.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _configPostgresqlDeploymentYaml = []byte(`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: registry.redhat.io/rhel8/postgresql-12
+          #image: postgres:12
+          imagePullPolicy: "IfNotPresent"
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-config
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data:z
+              name: postgredb
+      volumes:
+        - name: postgredb
+          persistentVolumeClaim:
+            claimName: postgres-pv-claim
+`)
+
+func configPostgresqlDeploymentYamlBytes() ([]byte, error) {
+	return _configPostgresqlDeploymentYaml, nil
+}
+
+func configPostgresqlDeploymentYaml() (*asset, error) {
+	bytes, err := configPostgresqlDeploymentYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/postgresql/deployment.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _configPostgresqlPvcYaml = []byte(`kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: postgres-pv-claim
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+`)
+
+func configPostgresqlPvcYamlBytes() ([]byte, error) {
+	return _configPostgresqlPvcYaml, nil
+}
+
+func configPostgresqlPvcYaml() (*asset, error) {
+	bytes, err := configPostgresqlPvcYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/postgresql/pvc.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _configPostgresqlSchema20210108114509_clustersyncTableSql = []byte(`-- +goose Up
+-- SQL in this section is executed when the migration is applied.
+CREATE TABLE clustersyncs (
+	id serial NOT NULL PRIMARY KEY,
+	name varchar(255) NOT NULL,
+	namespace varchar(255) NOT NULL,
+	data jsonb NOT NULL,
+	unique (name, namespace)
+);
+-- +goose Down
+-- SQL in this section is executed when the migration is rolled back.
+DROP TABLE clustersyncs;
+`)
+
+func configPostgresqlSchema20210108114509_clustersyncTableSqlBytes() ([]byte, error) {
+	return _configPostgresqlSchema20210108114509_clustersyncTableSql, nil
+}
+
+func configPostgresqlSchema20210108114509_clustersyncTableSql() (*asset, error) {
+	bytes, err := configPostgresqlSchema20210108114509_clustersyncTableSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/postgresql/schema/20210108114509_clustersync-table.sql", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _configPostgresqlSvcYaml = []byte(`
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  ports:
+   - port: 5432
+  selector:
+   app: postgres
+`)
+
+func configPostgresqlSvcYamlBytes() ([]byte, error) {
+	return _configPostgresqlSvcYaml, nil
+}
+
+func configPostgresqlSvcYaml() (*asset, error) {
+	bytes, err := configPostgresqlSvcYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "config/postgresql/svc.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 // Asset loads and returns the asset for the given name.
 // It returns an error if the asset could not be found or
 // could not be loaded.
@@ -1684,35 +1856,40 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
-	"config/clustersync/service.yaml":                           configClustersyncServiceYaml,
-	"config/clustersync/statefulset.yaml":                       configClustersyncStatefulsetYaml,
-	"config/hiveadmission/apiservice.yaml":                      configHiveadmissionApiserviceYaml,
-	"config/hiveadmission/clusterdeployment-webhook.yaml":       configHiveadmissionClusterdeploymentWebhookYaml,
-	"config/hiveadmission/clusterimageset-webhook.yaml":         configHiveadmissionClusterimagesetWebhookYaml,
-	"config/hiveadmission/clusterprovision-webhook.yaml":        configHiveadmissionClusterprovisionWebhookYaml,
-	"config/hiveadmission/deployment.yaml":                      configHiveadmissionDeploymentYaml,
-	"config/hiveadmission/dnszones-webhook.yaml":                configHiveadmissionDnszonesWebhookYaml,
-	"config/hiveadmission/hiveadmission_rbac_role.yaml":         configHiveadmissionHiveadmission_rbac_roleYaml,
-	"config/hiveadmission/hiveadmission_rbac_role_binding.yaml": configHiveadmissionHiveadmission_rbac_role_bindingYaml,
-	"config/hiveadmission/machinepool-webhook.yaml":             configHiveadmissionMachinepoolWebhookYaml,
-	"config/hiveadmission/selectorsyncset-webhook.yaml":         configHiveadmissionSelectorsyncsetWebhookYaml,
-	"config/hiveadmission/service-account.yaml":                 configHiveadmissionServiceAccountYaml,
-	"config/hiveadmission/service.yaml":                         configHiveadmissionServiceYaml,
-	"config/hiveadmission/syncset-webhook.yaml":                 configHiveadmissionSyncsetWebhookYaml,
-	"config/controllers/deployment.yaml":                        configControllersDeploymentYaml,
-	"config/controllers/hive_controllers_role.yaml":             configControllersHive_controllers_roleYaml,
-	"config/controllers/hive_controllers_role_binding.yaml":     configControllersHive_controllers_role_bindingYaml,
-	"config/controllers/hive_controllers_serviceaccount.yaml":   configControllersHive_controllers_serviceaccountYaml,
-	"config/controllers/service.yaml":                           configControllersServiceYaml,
-	"config/rbac/hive_admin_role.yaml":                          configRbacHive_admin_roleYaml,
-	"config/rbac/hive_admin_role_binding.yaml":                  configRbacHive_admin_role_bindingYaml,
-	"config/rbac/hive_clusterpool_admin.yaml":                   configRbacHive_clusterpool_adminYaml,
-	"config/rbac/hive_frontend_role.yaml":                       configRbacHive_frontend_roleYaml,
-	"config/rbac/hive_frontend_role_binding.yaml":               configRbacHive_frontend_role_bindingYaml,
-	"config/rbac/hive_frontend_serviceaccount.yaml":             configRbacHive_frontend_serviceaccountYaml,
-	"config/rbac/hive_reader_role.yaml":                         configRbacHive_reader_roleYaml,
-	"config/rbac/hive_reader_role_binding.yaml":                 configRbacHive_reader_role_bindingYaml,
-	"config/configmaps/install-log-regexes-configmap.yaml":      configConfigmapsInstallLogRegexesConfigmapYaml,
+	"config/clustersync/service.yaml":                               configClustersyncServiceYaml,
+	"config/clustersync/statefulset.yaml":                           configClustersyncStatefulsetYaml,
+	"config/hiveadmission/apiservice.yaml":                          configHiveadmissionApiserviceYaml,
+	"config/hiveadmission/clusterdeployment-webhook.yaml":           configHiveadmissionClusterdeploymentWebhookYaml,
+	"config/hiveadmission/clusterimageset-webhook.yaml":             configHiveadmissionClusterimagesetWebhookYaml,
+	"config/hiveadmission/clusterprovision-webhook.yaml":            configHiveadmissionClusterprovisionWebhookYaml,
+	"config/hiveadmission/deployment.yaml":                          configHiveadmissionDeploymentYaml,
+	"config/hiveadmission/dnszones-webhook.yaml":                    configHiveadmissionDnszonesWebhookYaml,
+	"config/hiveadmission/hiveadmission_rbac_role.yaml":             configHiveadmissionHiveadmission_rbac_roleYaml,
+	"config/hiveadmission/hiveadmission_rbac_role_binding.yaml":     configHiveadmissionHiveadmission_rbac_role_bindingYaml,
+	"config/hiveadmission/machinepool-webhook.yaml":                 configHiveadmissionMachinepoolWebhookYaml,
+	"config/hiveadmission/selectorsyncset-webhook.yaml":             configHiveadmissionSelectorsyncsetWebhookYaml,
+	"config/hiveadmission/service-account.yaml":                     configHiveadmissionServiceAccountYaml,
+	"config/hiveadmission/service.yaml":                             configHiveadmissionServiceYaml,
+	"config/hiveadmission/syncset-webhook.yaml":                     configHiveadmissionSyncsetWebhookYaml,
+	"config/controllers/deployment.yaml":                            configControllersDeploymentYaml,
+	"config/controllers/hive_controllers_role.yaml":                 configControllersHive_controllers_roleYaml,
+	"config/controllers/hive_controllers_role_binding.yaml":         configControllersHive_controllers_role_bindingYaml,
+	"config/controllers/hive_controllers_serviceaccount.yaml":       configControllersHive_controllers_serviceaccountYaml,
+	"config/controllers/service.yaml":                               configControllersServiceYaml,
+	"config/rbac/hive_admin_role.yaml":                              configRbacHive_admin_roleYaml,
+	"config/rbac/hive_admin_role_binding.yaml":                      configRbacHive_admin_role_bindingYaml,
+	"config/rbac/hive_clusterpool_admin.yaml":                       configRbacHive_clusterpool_adminYaml,
+	"config/rbac/hive_frontend_role.yaml":                           configRbacHive_frontend_roleYaml,
+	"config/rbac/hive_frontend_role_binding.yaml":                   configRbacHive_frontend_role_bindingYaml,
+	"config/rbac/hive_frontend_serviceaccount.yaml":                 configRbacHive_frontend_serviceaccountYaml,
+	"config/rbac/hive_reader_role.yaml":                             configRbacHive_reader_roleYaml,
+	"config/rbac/hive_reader_role_binding.yaml":                     configRbacHive_reader_role_bindingYaml,
+	"config/configmaps/install-log-regexes-configmap.yaml":          configConfigmapsInstallLogRegexesConfigmapYaml,
+	"config/postgresql/config-secret.yaml":                          configPostgresqlConfigSecretYaml,
+	"config/postgresql/deployment.yaml":                             configPostgresqlDeploymentYaml,
+	"config/postgresql/pvc.yaml":                                    configPostgresqlPvcYaml,
+	"config/postgresql/schema/20210108114509_clustersync-table.sql": configPostgresqlSchema20210108114509_clustersyncTableSql,
+	"config/postgresql/svc.yaml":                                    configPostgresqlSvcYaml,
 }
 
 // AssetDir returns the file names below a certain
@@ -1785,6 +1962,15 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"service-account.yaml":                 {configHiveadmissionServiceAccountYaml, map[string]*bintree{}},
 			"service.yaml":                         {configHiveadmissionServiceYaml, map[string]*bintree{}},
 			"syncset-webhook.yaml":                 {configHiveadmissionSyncsetWebhookYaml, map[string]*bintree{}},
+		}},
+		"postgresql": {nil, map[string]*bintree{
+			"config-secret.yaml": {configPostgresqlConfigSecretYaml, map[string]*bintree{}},
+			"deployment.yaml":    {configPostgresqlDeploymentYaml, map[string]*bintree{}},
+			"pvc.yaml":           {configPostgresqlPvcYaml, map[string]*bintree{}},
+			"schema": {nil, map[string]*bintree{
+				"20210108114509_clustersync-table.sql": {configPostgresqlSchema20210108114509_clustersyncTableSql, map[string]*bintree{}},
+			}},
+			"svc.yaml": {configPostgresqlSvcYaml, map[string]*bintree{}},
 		}},
 		"rbac": {nil, map[string]*bintree{
 			"hive_admin_role.yaml":              {configRbacHive_admin_roleYaml, map[string]*bintree{}},
