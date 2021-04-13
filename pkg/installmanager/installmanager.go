@@ -417,43 +417,47 @@ func (m *InstallManager) Run() error {
 		}
 	}
 
-	installErr := m.provisionCluster(m)
-	if installErr != nil {
-		m.log.WithError(installErr).Error("error running openshift-install, running deprovision to clean up")
+	installErr := errors.New("oh no!")
+	/*
+		installErr := m.provisionCluster(m)
+		if installErr != nil {
+			m.log.WithError(installErr).Error("error running openshift-install, running deprovision to clean up")
 
-		if pauseDur, ok := cd.Annotations[constants.PauseOnInstallFailureAnnotation]; ok {
-			m.log.Infof("pausing on failure due to annotation %s=%s", constants.PauseOnInstallFailureAnnotation,
-				pauseDur)
-			dur, err := time.ParseDuration(pauseDur)
-			if err != nil {
-				// Not a fatal error.
-				m.log.WithError(err).WithField("pauseDuration", pauseDur).Warn("error parsing pause duration, skipping pause")
+			if pauseDur, ok := cd.Annotations[constants.PauseOnInstallFailureAnnotation]; ok {
+				m.log.Infof("pausing on failure due to annotation %s=%s", constants.PauseOnInstallFailureAnnotation,
+					pauseDur)
+				dur, err := time.ParseDuration(pauseDur)
+				if err != nil {
+					// Not a fatal error.
+					m.log.WithError(err).WithField("pauseDuration", pauseDur).Warn("error parsing pause duration, skipping pause")
+				} else {
+					time.Sleep(dur)
+				}
+			}
+
+			// Fetch logs from all cluster machines:
+			if m.actuator == nil {
+				m.log.Debug("Unable to find log storage actuator. Disabling gathering logs.")
 			} else {
-				time.Sleep(dur)
+				m.gatherLogs(provision, cd, sshKeyPath, sshAgentSetupErr)
 			}
 		}
+	*/
 
-		// Fetch logs from all cluster machines:
-		if m.actuator == nil {
-			m.log.Debug("Unable to find log storage actuator. Disabling gathering logs.")
-		} else {
-			m.gatherLogs(provision, cd, sshKeyPath, sshAgentSetupErr)
-		}
+	//	if installLog, err := m.readInstallerLog(provision, m, scrubInstallLog); err == nil {
+	installLog := "VpcLimitExceeded"
+	if err := m.updateClusterProvision(
+		provision,
+		m,
+		func(provision *hivev1.ClusterProvision) {
+			provision.Spec.InstallLog = pointer.StringPtr(installLog)
+		},
+	); err != nil {
+		m.log.WithError(err).Warning("error updating cluster provision with installer log")
 	}
-
-	if installLog, err := m.readInstallerLog(provision, m, scrubInstallLog); err == nil {
-		if err := m.updateClusterProvision(
-			provision,
-			m,
-			func(provision *hivev1.ClusterProvision) {
-				provision.Spec.InstallLog = pointer.StringPtr(installLog)
-			},
-		); err != nil {
-			m.log.WithError(err).Warning("error updating cluster provision with installer log")
-		}
-	} else {
-		m.log.WithError(err).Error("error reading installer log")
-	}
+	//	} else {
+	//		m.log.WithError(err).Error("error reading installer log")
+	//	}
 
 	if installErr != nil {
 		m.log.WithError(installErr).Error("failed due to install error")
